@@ -68,11 +68,20 @@ const items = [
               >Mis Tallas</UButton>
             </NuxtLink>
           </h3>
-          <UButton
+          <!-- <UButton
             v-if="!loggedIn"
             to="/api/auth/github"
             icon="i-simple-icons-github"
             label="Iniciar sesión con GitHub"
+            color="neutral"
+            size="xs"
+            external
+          /> -->
+          <UButton
+            v-if="!loggedIn"
+            to="/api/auth/google"
+            icon="i-simple-icons-google"
+            label="Iniciar sesión con Google"
             color="neutral"
             size="xs"
             external
