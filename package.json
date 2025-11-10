@@ -19,7 +19,7 @@
     "drizzle-kit": "^0.31.1",
     "drizzle-orm": "0.44.2",
     "h3-zod": "^0.5.3",
-    "nuxt": "^3.17.5",
+    "nuxt": "^4.2.1",
     "nuxt-auth-utils": "^0.5.20",
     "pinia": "^3.0.3",
     "zod": "^3.25.67"
