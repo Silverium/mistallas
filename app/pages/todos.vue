@@ -14,7 +14,7 @@ const { data: todos } = useQuery(todosQuery)
 
 const { mutate: addTodo, isLoading: loading } = useMutation({
   mutation: (title: string) => {
-    if (!title.trim()) throw new Error('Title is required')
+    if (!title.trim()) throw new Error('El título es obligatorio')
 
     return $fetch('/api/todos', {
       method: 'POST',
@@ -27,7 +27,7 @@ const { mutate: addTodo, isLoading: loading } = useMutation({
 
   async onSuccess(todo) {
     await queryCache.invalidateQueries(todosQuery)
-    toast.add({ title: `Todo "${todo.title}" created.` })
+    toast.add({ title: `Tarea "${todo.title}" creada.` })
   },
 
   onSettled() {
@@ -50,7 +50,7 @@ const { mutate: addTodo, isLoading: loading } = useMutation({
     }
     else {
       console.error(err)
-      toast.add({ title: 'Unexpected Error', color: 'error' })
+      toast.add({ title: 'Error inesperado', color: 'error' })
     }
   }
 })
@@ -75,7 +75,7 @@ const { mutate: deleteTodo } = useMutation({
 
   async onSuccess(_result, todo) {
     await queryCache.invalidateQueries(todosQuery)
-    toast.add({ title: `Todo "${todo.title}" deleted.` })
+    toast.add({ title: `Tarea "${todo.title}" eliminada.` })
   }
 })
 </script>
@@ -92,7 +92,7 @@ const { mutate: deleteTodo } = useMutation({
         name="todo"
         :disabled="loading"
         class="flex-1"
-        placeholder="Make a Nuxt demo"
+        placeholder="Mi próxima compra..."
         autocomplete="off"
         :ui="{ root: 'flex-1' }"
       />

@@ -87,7 +87,7 @@ const { mutate: addTodo } = useMutation({
     }
     else {
       console.error(err)
-      toast.add({ title: 'Unexpected Error', color: 'error' })
+      toast.add({ title: 'Error inesperado', color: 'error' })
     }
   }
 })
@@ -133,7 +133,7 @@ const { mutate: toggleTodo } = useMutation({
     }
 
     console.error(err)
-    toast.add({ title: 'Unexpected Error', color: 'error' })
+    toast.add({ title: 'Error inesperado', color: 'error' })
   }
 })
 
@@ -166,7 +166,7 @@ const { mutate: deleteTodo } = useMutation({
     }
 
     console.error(err)
-    toast.add({ title: 'Unexpected Error', color: 'error' })
+    toast.add({ title: 'Error inesperado', color: 'error' })
   }
 })
 </script>
@@ -181,7 +181,7 @@ const { mutate: deleteTodo } = useMutation({
         v-model="newTodo"
         name="todo"
         class="flex-1"
-        placeholder="Make a Nuxt demo"
+        placeholder="Mi próxima compra..."
         autocomplete="off"
         autofocus
         :ui="{ root: 'flex-1' }"

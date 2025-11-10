@@ -25,7 +25,7 @@ useSeoMeta({
   viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
   title: 'Mis Tallas',
   description:
-    'Una aplicación sencilla para gestionar tus tallas de ropa y calzado.',
+    'Una aplicación sencilla para gestionar tus tallas de ropa, calzado y accesorios.',
   ogImage: '/social-image.png',
   twitterImage: '/social-image.png',
   twitterCard: 'summary_large_image'
@@ -49,11 +49,9 @@ const items = [
         <UButton
           square
           variant="ghost"
-          color="neutral"
-          :icon="
-            $colorMode.preference === 'dark' || $colorMode.preference === 'system'
-              ? 'i-lucide-moon'
-              : 'i-lucide-sun'
+          :icon="$colorMode.preference === 'dark' || $colorMode.preference === 'system'
+            ? 'i-lucide-moon'
+            : 'i-lucide-sun'
           "
           @click="isDarkMode = !isDarkMode"
         />
@@ -63,7 +61,11 @@ const items = [
         <template #header>
           <h3 class="text-lg font-semibold leading-6">
             <NuxtLink to="/">
-              Inicio
+              <UButton
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-home"
+              >Mis Tallas</UButton>
             </NuxtLink>
           </h3>
           <UButton
@@ -82,14 +84,14 @@ const items = [
             <UButton
               to="/todos"
               icon="i-lucide-list"
-              label="Todos"
+              label="Tareas"
               :color="$route.path === '/todos' ? 'primary' : 'neutral'"
               variant="ghost"
             />
             <UButton
               to="/optimistic-todos"
               icon="i-lucide-sparkles"
-              label="Optimistic Todos"
+              label="Tareas Optimistas"
               :color="$route.path === '/optimistic-todos' ? 'primary' : 'neutral'"
               variant="ghost"
             />
@@ -117,20 +119,28 @@ const items = [
 
       <footer class="text-center mt-2">
         <NuxtLink
-          href="https://github.com/atinux/atidone"
+          href="https://github.com/silverium/mistallas"
           target="_blank"
           class="text-sm text-neutral-500 hover:text-neutral-700"
         >
-          GitHub
+          <UButton
+            color="neutral"
+            variant="link"
+            icon="i-lucide-github"
+          />
         </NuxtLink>
         ·
-        <NuxtLink
-          href="https://twitter.com/atinux"
+        <ULink
+          to="https://x.com/soldesilver"
           target="_blank"
           class="text-sm text-neutral-500 hover:text-neutral-700"
         >
-          Twitter
-        </NuxtLink>
+          <UButton
+            color="neutral"
+            variant="link"
+            icon="prime:twitter"
+          />
+        </ULink>
       </footer>
     </UContainer>
   </UApp>
