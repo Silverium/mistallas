@@ -72,7 +72,7 @@ const items = [
             v-if="!loggedIn"
             to="/api/auth/github"
             icon="i-simple-icons-github"
-            label="Login with GitHub"
+            label="Iniciar sesión con GitHub"
             color="neutral"
             size="xs"
             external
