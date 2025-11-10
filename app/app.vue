@@ -23,9 +23,9 @@ useHead({
 
 useSeoMeta({
   viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
-  title: 'Atidone',
+  title: 'Mis Tallas',
   description:
-    'A Nuxt demo hosted with edge-side rendering, authentication and queyring a Cloudflare D1 database',
+    'Una aplicación sencilla para gestionar tus tallas de ropa y calzado.',
   ogImage: '/social-image.png',
   twitterImage: '/social-image.png',
   twitterCard: 'summary_large_image'
@@ -63,7 +63,7 @@ const items = [
         <template #header>
           <h3 class="text-lg font-semibold leading-6">
             <NuxtLink to="/">
-              Atidone
+              Inicio
             </NuxtLink>
           </h3>
           <UButton
