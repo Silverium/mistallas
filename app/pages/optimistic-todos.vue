@@ -184,7 +184,7 @@ const { mutate: deleteTodo } = useMutation({
         placeholder="Make a Nuxt demo"
         autocomplete="off"
         autofocus
-        :ui="{ wrapper: 'flex-1' }"
+        :ui="{ root: 'flex-1' }"
       />
 
       <UButton

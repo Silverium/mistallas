@@ -33,12 +33,9 @@ const { mutate: addTodo, isLoading: loading } = useMutation({
   onSettled() {
     newTodo.value = ''
     // the first nextTick allows loading to become false and re enable the input
-    // the second nextTick allows the input to be rendered again so it can be focused
-    // a better solution would be to use a custom `v-focus` directive or a more elaborated focus management solution
     nextTick()
-      .then(() => nextTick())
       .then(() => {
-        newTodoInput.value?.input?.focus()
+        newTodoInput.value?.inputRef?.focus()
       })
   },
 
@@ -48,12 +45,12 @@ const { mutate: addTodo, isLoading: loading } = useMutation({
         .map(issue => issue.message)
         .join('\n')
       if (title) {
-        toast.add({ title, color: 'red' })
+        toast.add({ title, color: 'error' })
       }
     }
     else {
       console.error(err)
-      toast.add({ title: 'Unexpected Error', color: 'red' })
+      toast.add({ title: 'Unexpected Error', color: 'error' })
     }
   }
 })
@@ -97,8 +94,7 @@ const { mutate: deleteTodo } = useMutation({
         class="flex-1"
         placeholder="Make a Nuxt demo"
         autocomplete="off"
-        autofocus
-        :ui="{ wrapper: 'flex-1' }"
+        :ui="{ root: 'flex-1' }"
       />
 
       <UButton
