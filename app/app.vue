@@ -68,24 +68,25 @@ const items = [
               >Mis Tallas</UButton>
             </NuxtLink>
           </h3>
-          <!-- <UButton
+          <UDropdownMenu
             v-if="!loggedIn"
-            to="/api/auth/github"
-            icon="i-simple-icons-github"
-            label="Iniciar sesión con GitHub"
-            color="neutral"
-            size="xs"
-            external
-          /> -->
-          <UButton
-            v-if="!loggedIn"
-            to="/api/auth/google"
-            icon="i-simple-icons-google"
-            label="Iniciar sesión con Google"
-            color="neutral"
-            size="xs"
-            external
-          />
+            :items="[
+              [
+                { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
+                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
+              ]
+            ]"
+          >
+            <UButton
+              variant="ghost"
+              color="neutral"
+              size="xs"
+              icon="i-lucide-log-in"
+              trailing-icon="i-lucide-chevron-down"
+            >
+              Iniciar sesión
+            </UButton>
+          </UDropdownMenu>
           <div
             v-else
             class="flex flex-wrap -mx-2 sm:mx-0"
