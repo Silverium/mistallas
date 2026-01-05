@@ -12,9 +12,25 @@ export default defineNuxtConfig({
   },
   css: ['~/assets/main.css'],
   future: { compatibilityVersion: 4 },
-  compatibilityDate: '2025-04-02',
+  compatibilityDate: '2025-12-20',
+  nitro: {
+    experimental: {
+      database: true // this turns on the feature
+    },
+    database: {
+      devDatabase: {
+        connector: 'sqlite',
+        options: { name: 'devDb' } // stored in ./.data/devDb.sqlite3
+      }
+    },
+    preset: 'cloudflare_module',
+    cloudflare: {
+      deployConfig: true,
+      nodeCompat: true
+    }
+  },
   hub: {
-    database: true
+    db: 'sqlite'
   },
   // Development config
   eslint: {
