@@ -74,7 +74,12 @@ type RowDiff = {
   delta: number
 }
 
-const { data: purchases } = useQuery(purchasesQuery)
+const { loggedIn } = useUserSession()
+
+const { data: purchases } = useQuery({
+  ...purchasesQuery,
+  enabled: () => loggedIn.value
+})
 
 const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
   mutation: () => $fetch('/api/purchases', {

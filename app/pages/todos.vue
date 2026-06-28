@@ -10,7 +10,12 @@ const newTodoInput = useTemplateRef('new-todo')
 const toast = useToast()
 const queryCache = useQueryCache()
 
-const { data: todos } = useQuery(todosQuery)
+const { loggedIn } = useUserSession()
+
+const { data: todos } = useQuery({
+  ...todosQuery,
+  enabled: () => loggedIn.value
+})
 
 const { mutate: addTodo, isLoading: loading } = useMutation({
   mutation: (title: string) => {

@@ -10,7 +10,12 @@ const toast = useToast()
 const { user } = useUserSession()
 const queryCache = useQueryCache()
 
-const { data: todos } = useQuery(todosQuery)
+const { loggedIn } = useUserSession()
+
+const { data: todos } = useQuery({
+  ...todosQuery,
+  enabled: () => loggedIn.value
+})
 
 const { mutate: addTodo } = useMutation({
   mutation: (title: string) => {

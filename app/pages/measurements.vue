@@ -30,7 +30,12 @@ const form = reactive({
 
 const bulkJson = ref('')
 
-const { data: measurements } = useQuery(measurementsQuery)
+const { loggedIn } = useUserSession()
+
+const { data: measurements } = useQuery({
+  ...measurementsQuery,
+  enabled: () => loggedIn.value
+})
 
 const { mutate: addMeasurement, isLoading: adding } = useMutation({
   mutation: () => $fetch('/api/measurements', {
@@ -85,7 +90,7 @@ const { mutate: uploadMeasurements, isLoading: uploading } = useMutation({
     }
 
     if (!Array.isArray(parsed)) {
-      throw new Error('El JSON debe ser un arreglo de medidas.')
+      throw new Error('El JSON debe ser una colección de medidas.')
     }
 
     return $fetch<{ uploaded: number }>('/api/measurements/upload', {
