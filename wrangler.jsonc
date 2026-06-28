@@ -26,7 +26,8 @@
 			"d1_databases": [
 				{
 					"binding": "DB",
-					"database_id": "local-d1-database-id"
+					"database_name": "mistallas-local",
+					"database_id": "96cdd057-96b5-4dbd-9e3d-cb93ff7d2361"
 				}
 			]
 		}

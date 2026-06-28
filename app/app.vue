@@ -105,6 +105,20 @@ const items = [
               :color="$route.path === '/optimistic-todos' ? 'primary' : 'neutral'"
               variant="ghost"
             />
+            <UButton
+              to="/measurements"
+              icon="i-lucide-ruler"
+              label="Medidas"
+              :color="$route.path === '/measurements' ? 'primary' : 'neutral'"
+              variant="ghost"
+            />
+            <UButton
+              to="/purchases"
+              icon="i-lucide-shopping-bag"
+              label="Compras"
+              :color="$route.path === '/purchases' ? 'primary' : 'neutral'"
+              variant="ghost"
+            />
             <UDropdownMenu
               v-if="user"
               :items="items"

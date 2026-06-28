@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "dev": "nuxi dev",
-    "dev:local": "nuxt build && wrangler pages dev .output/public --env local",
+    "dev:local": "nuxt build && wrangler pages dev .output/public",
     "build": "nuxi build",
     "preview": "npx nuxthub preview",
     "db:generate": "drizzle-kit generate",
