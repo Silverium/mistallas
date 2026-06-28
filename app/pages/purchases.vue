@@ -12,6 +12,8 @@ type Purchase = {
   productType: string
   sizeLabel: string
   purchasedAt: string | Date
+  fitFeedback?: string | null
+  notes?: string | null
 }
 
 type ComparisonResult = {
@@ -64,6 +66,7 @@ const form = reactive({
 
 const selectedComparison = ref<ComparisonResult | null>(null)
 const selectedPurchase = ref<Purchase | null>(null)
+const historyFilter = ref('')
 
 type RowDiff = {
   key: string
@@ -129,6 +132,26 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
 })
 
 const purchaseList = computed(() => (purchases.value ?? []) as Purchase[])
+
+const filteredPurchaseList = computed(() => {
+  const term = historyFilter.value.trim().toLowerCase()
+  if (!term) {
+    return purchaseList.value
+  }
+
+  return purchaseList.value.filter((purchase) => {
+    const haystack = [
+      purchase.brand,
+      purchase.category,
+      purchase.productType,
+      purchase.sizeLabel,
+      purchase.fitFeedback,
+      purchase.notes
+    ].filter(Boolean).join(' ').toLowerCase()
+
+    return haystack.includes(term)
+  })
+})
 
 const fmt = (value: number, unit: string) => `${value.toFixed(1)} ${unit}`
 
@@ -233,9 +256,14 @@ const diffRows = computed<RowDiff[]>(() => {
       <h3 class="font-medium">
         Historial de compras
       </h3>
+      <UInput
+        v-model="historyFilter"
+        icon="i-lucide-filter"
+        placeholder="Filtrar por marca, categoría, prenda, talla o notas"
+      />
       <ul class="divide-y divide-gray-200 dark:divide-gray-800">
         <li
-          v-for="purchase in purchaseList"
+          v-for="purchase in filteredPurchaseList"
           :key="purchase.id"
           class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
         >
@@ -245,6 +273,12 @@ const diffRows = computed<RowDiff[]>(() => {
             </p>
             <p class="text-sm text-muted">
               {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}
+            </p>
+            <p
+              v-if="purchase.notes || purchase.fitFeedback"
+              class="text-sm text-muted"
+            >
+              {{ purchase.notes || purchase.fitFeedback }}
             </p>
           </div>
 
@@ -258,6 +292,12 @@ const diffRows = computed<RowDiff[]>(() => {
           </UButton>
         </li>
       </ul>
+      <p
+        v-if="!filteredPurchaseList.length"
+        class="text-sm text-muted"
+      >
+        No hay compras que coincidan con el filtro.
+      </p>
     </div>
 
     <UAlert
