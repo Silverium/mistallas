@@ -92,6 +92,20 @@ const items = [
             class="flex flex-wrap -mx-2 sm:mx-0"
           >
             <UButton
+              to="/purchases"
+              icon="i-lucide-shopping-bag"
+              label="Compras"
+              :color="$route.path === '/purchases' ? 'primary' : 'neutral'"
+              variant="ghost"
+            />
+            <UButton
+              to="/measurements"
+              icon="i-lucide-ruler"
+              label="Medidas"
+              :color="$route.path === '/measurements' ? 'primary' : 'neutral'"
+              variant="ghost"
+            />
+            <UButton
               to="/todos"
               icon="i-lucide-list"
               label="Tareas"
@@ -103,20 +117,6 @@ const items = [
               icon="i-lucide-sparkles"
               label="Tareas Optimistas"
               :color="$route.path === '/optimistic-todos' ? 'primary' : 'neutral'"
-              variant="ghost"
-            />
-            <UButton
-              to="/measurements"
-              icon="i-lucide-ruler"
-              label="Medidas"
-              :color="$route.path === '/measurements' ? 'primary' : 'neutral'"
-              variant="ghost"
-            />
-            <UButton
-              to="/purchases"
-              icon="i-lucide-shopping-bag"
-              label="Compras"
-              :color="$route.path === '/purchases' ? 'primary' : 'neutral'"
               variant="ghost"
             />
             <UDropdownMenu
