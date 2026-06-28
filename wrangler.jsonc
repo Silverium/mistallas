@@ -14,12 +14,14 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_id": "1265db28-1adb-4e9a-9749-39bc8dc4406d"
+			"database_id": "1265db28-1adb-4e9a-9749-39bc8dc4406d",
+			"migrations_dir": "server/db/migrations"
 		},
 		{
 			"binding": "mistallas_local",
 			"database_name": "mistallas-local",
-			"database_id": "96cdd057-96b5-4dbd-9e3d-cb93ff7d2361"
+			"database_id": "96cdd057-96b5-4dbd-9e3d-cb93ff7d2361",
+			"migrations_dir": "server/db/migrations"
 		}
 	],
 	"env": {
@@ -28,7 +30,8 @@
 				{
 					"binding": "DB",
 					"database_name": "mistallas-local",
-					"database_id": "96cdd057-96b5-4dbd-9e3d-cb93ff7d2361"
+					"database_id": "96cdd057-96b5-4dbd-9e3d-cb93ff7d2361",
+					"migrations_dir": "server/db/migrations"
 				}
 			]
 		}
