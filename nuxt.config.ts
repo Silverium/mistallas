@@ -8,9 +8,10 @@ export default defineNuxtConfig({
     '@pinia/colada-nuxt'
   ],
   devtools: {
-    enabled: true
+    enabled: process.env.NUXT_DEV_SERVER === 'true'
   },
   css: ['~/assets/main.css'],
+  sourcemap: process.env.NUXT_DEV_SERVER === 'true' ? { server: true, client: true } : false,
   future: { compatibilityVersion: 4 },
   compatibilityDate: '2025-12-20',
   nitro: {
