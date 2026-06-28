@@ -98,6 +98,7 @@ const { mutate: deleteTodo } = useMutation({
         :disabled="loading"
         class="flex-1"
         placeholder="Mi próxima compra..."
+        autofocus
         autocomplete="off"
         :ui="{ root: 'flex-1' }"
       />

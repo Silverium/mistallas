@@ -219,6 +219,7 @@ const diffRows = computed<RowDiff[]>(() => {
         v-model="form.brand"
         placeholder="Marca (Nike, Zara...) *"
         required
+        autofocus
       />
       <UInput
         v-model="form.category"

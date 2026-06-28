@@ -166,6 +166,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         min="1"
         placeholder="Peso (kg) *"
         required
+        autofocus
       />
       <UInput
         v-model="form.heightCm"
