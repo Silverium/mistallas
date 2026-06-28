@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { purchasesQuery } from '~/queries/purchases'
+import { useSyncedStringQueryParam } from '~/utils/query-param'
 
 definePageMeta({
   middleware: 'auth'
@@ -66,7 +67,7 @@ const form = reactive({
 
 const selectedComparison = ref<ComparisonResult | null>(null)
 const selectedPurchase = ref<Purchase | null>(null)
-const historyFilter = ref('')
+const historyFilter = useSyncedStringQueryParam('filter')
 
 type RowDiff = {
   key: string
