@@ -13,6 +13,11 @@ type Measurement = {
   chestCm?: number | null
   waistCm?: number | null
   hipsCm?: number | null
+  shoulderWidthCm?: number | null
+  sleeveLengthCm?: number | null
+  neckCm?: number | null
+  inseamCm?: number | null
+  thighCm?: number | null
   notes?: string | null
 }
 
@@ -25,6 +30,11 @@ const form = reactive({
   chestCm: '',
   waistCm: '',
   hipsCm: '',
+  shoulderWidthCm: '',
+  sleeveLengthCm: '',
+  neckCm: '',
+  inseamCm: '',
+  thighCm: '',
   notes: ''
 })
 
@@ -46,6 +56,11 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
       chestCm: form.chestCm ? Number(form.chestCm) : undefined,
       waistCm: form.waistCm ? Number(form.waistCm) : undefined,
       hipsCm: form.hipsCm ? Number(form.hipsCm) : undefined,
+      shoulderWidthCm: form.shoulderWidthCm ? Number(form.shoulderWidthCm) : undefined,
+      sleeveLengthCm: form.sleeveLengthCm ? Number(form.sleeveLengthCm) : undefined,
+      neckCm: form.neckCm ? Number(form.neckCm) : undefined,
+      inseamCm: form.inseamCm ? Number(form.inseamCm) : undefined,
+      thighCm: form.thighCm ? Number(form.thighCm) : undefined,
       notes: form.notes || undefined
     }
   }),
@@ -56,6 +71,11 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
     form.chestCm = ''
     form.waistCm = ''
     form.hipsCm = ''
+    form.shoulderWidthCm = ''
+    form.sleeveLengthCm = ''
+    form.neckCm = ''
+    form.inseamCm = ''
+    form.thighCm = ''
     form.notes = ''
     toast.add({ title: 'Medida guardada correctamente.' })
   },
@@ -174,6 +194,41 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         step="0.1"
         min="1"
         placeholder="Cadera (cm)"
+      />
+      <UInput
+        v-model="form.shoulderWidthCm"
+        type="number"
+        step="0.1"
+        min="1"
+        placeholder="Ancho de hombros (cm)"
+      />
+      <UInput
+        v-model="form.sleeveLengthCm"
+        type="number"
+        step="0.1"
+        min="1"
+        placeholder="Largo de manga (cm)"
+      />
+      <UInput
+        v-model="form.neckCm"
+        type="number"
+        step="0.1"
+        min="1"
+        placeholder="Cuello (cm)"
+      />
+      <UInput
+        v-model="form.inseamCm"
+        type="number"
+        step="0.1"
+        min="1"
+        placeholder="Entrepierna (cm)"
+      />
+      <UInput
+        v-model="form.thighCm"
+        type="number"
+        step="0.1"
+        min="1"
+        placeholder="Muslo (cm)"
       />
       <UInput
         v-model="form.notes"
