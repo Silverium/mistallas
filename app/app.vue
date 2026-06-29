@@ -54,7 +54,9 @@ const items = [
             : 'i-lucide-sun'
           "
           @click="isDarkMode = !isDarkMode"
-        />
+        >
+          {{ isDarkMode ? 'Claro' : 'Oscuro' }}
+        </UButton>
       </div>
 
       <UCard variant="subtle">
