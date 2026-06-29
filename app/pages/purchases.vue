@@ -71,6 +71,7 @@ const selectedPurchase = ref<Purchase | null>(null)
 const historyFilter = useSyncedStringQueryParam('filter')
 const editingPurchaseId = ref<number | null>(null)
 const deletingPurchaseId = ref<number | null>(null)
+const isPurchaseFormVisible = ref(false)
 
 type RowDiff = {
   key: string
@@ -203,9 +204,11 @@ const resetForm = () => {
   form.fitFeedback = ''
   form.notes = ''
   editingPurchaseId.value = null
+  isPurchaseFormVisible.value = false
 }
 
 const startEditing = (purchase: Purchase) => {
+  isPurchaseFormVisible.value = true
   editingPurchaseId.value = purchase.id
   form.brand = purchase.brand
   form.category = purchase.category
@@ -310,9 +313,20 @@ const diffRows = computed<RowDiff[]>(() => {
       <p class="text-sm text-muted">
         Guarda compras para comparar tus medidas de ese momento con las actuales.
       </p>
+      <div class="mt-3">
+        <UButton
+          v-if="!isPurchaseFormVisible"
+          type="button"
+          icon="i-lucide-plus"
+          @click="isPurchaseFormVisible = true"
+        >
+          Añadir compra
+        </UButton>
+      </div>
     </div>
 
     <form
+      v-if="isPurchaseFormVisible"
       class="grid grid-cols-1 sm:grid-cols-2 gap-3"
       @submit.prevent="savePurchase()"
     >
@@ -366,6 +380,16 @@ const diffRows = computed<RowDiff[]>(() => {
         >
           Cancelar edición
         </UButton>
+        <UButton
+          v-else
+          type="button"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-x"
+          @click="resetForm"
+        >
+          Cerrar formulario
+        </UButton>
       </div>
     </form>
 
@@ -382,7 +406,7 @@ const diffRows = computed<RowDiff[]>(() => {
         <li
           v-for="purchase in filteredPurchaseList"
           :key="purchase.id"
-          class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+          class="py-3 space-y-3"
         >
           <div>
             <p class="font-medium">
@@ -399,11 +423,12 @@ const diffRows = computed<RowDiff[]>(() => {
             </p>
           </div>
 
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-col sm:flex-row gap-2">
             <UButton
               variant="soft"
               color="neutral"
               icon="i-lucide-pencil"
+              class="flex-shrink-0"
               @click="startEditing(purchase)"
             >
               Editar
@@ -412,6 +437,7 @@ const diffRows = computed<RowDiff[]>(() => {
               color="error"
               variant="soft"
               icon="i-lucide-trash"
+              class="flex-shrink-0"
               :loading="deletingPurchase && deletingPurchaseId === purchase.id"
               @click="confirmAndDelete(purchase)"
             >
@@ -420,6 +446,7 @@ const diffRows = computed<RowDiff[]>(() => {
             <UButton
               variant="soft"
               icon="i-lucide-git-compare"
+              class="flex-1"
               :loading="comparing && selectedPurchase?.id === purchase.id"
               @click="comparePurchase(purchase)"
             >

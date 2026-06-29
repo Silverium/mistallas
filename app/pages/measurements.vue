@@ -39,6 +39,22 @@ const form = reactive({
 })
 
 const bulkJson = ref('')
+const isMeasurementFormVisible = ref(false)
+
+const resetForm = () => {
+  form.weightKg = ''
+  form.heightCm = ''
+  form.chestCm = ''
+  form.waistCm = ''
+  form.hipsCm = ''
+  form.shoulderWidthCm = ''
+  form.sleeveLengthCm = ''
+  form.neckCm = ''
+  form.inseamCm = ''
+  form.thighCm = ''
+  form.notes = ''
+  isMeasurementFormVisible.value = false
+}
 
 const { loggedIn } = useUserSession()
 
@@ -66,17 +82,7 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
   }),
   async onSuccess() {
     await queryCache.invalidateQueries(measurementsQuery)
-    form.weightKg = ''
-    form.heightCm = ''
-    form.chestCm = ''
-    form.waistCm = ''
-    form.hipsCm = ''
-    form.shoulderWidthCm = ''
-    form.sleeveLengthCm = ''
-    form.neckCm = ''
-    form.inseamCm = ''
-    form.thighCm = ''
-    form.notes = ''
+    resetForm()
     toast.add({ title: 'Medida guardada correctamente.' })
   },
   onError(err) {
@@ -153,9 +159,20 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
       <p class="text-sm text-muted">
         Guarda tu historial para comparar cómo cambiaste entre compras.
       </p>
+      <div class="mt-3">
+        <UButton
+          v-if="!isMeasurementFormVisible"
+          type="button"
+          icon="i-lucide-plus"
+          @click="isMeasurementFormVisible = true"
+        >
+          Añadir medida
+        </UButton>
+      </div>
     </div>
 
     <form
+      v-if="isMeasurementFormVisible"
       class="grid grid-cols-1 sm:grid-cols-2 gap-3"
       @submit.prevent="addMeasurement()"
     >
@@ -236,7 +253,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         placeholder="Notas (opcional)"
       />
 
-      <div class="sm:col-span-2">
+      <div class="sm:col-span-2 flex flex-wrap gap-2">
         <UButton
           type="submit"
           icon="i-lucide-save"
@@ -245,10 +262,22 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         >
           Guardar medida
         </UButton>
+        <UButton
+          type="button"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-x"
+          @click="resetForm"
+        >
+          Cerrar formulario
+        </UButton>
       </div>
     </form>
 
-    <div class="space-y-2">
+    <div
+      v-if="isMeasurementFormVisible"
+      class="space-y-2"
+    >
       <h3 class="font-medium">
         Carga masiva (JSON)
       </h3>
@@ -301,7 +330,9 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
             size="xs"
             icon="i-lucide-trash"
             @click="removeMeasurement(item.id)"
-          />
+          >
+            Eliminar
+          </UButton>
         </li>
       </ul>
     </div>
