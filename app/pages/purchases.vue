@@ -62,12 +62,15 @@ const form = reactive({
   category: '',
   productType: '',
   sizeLabel: '',
-  fitFeedback: ''
+  fitFeedback: '',
+  notes: ''
 })
 
 const selectedComparison = ref<ComparisonResult | null>(null)
 const selectedPurchase = ref<Purchase | null>(null)
 const historyFilter = useSyncedStringQueryParam('filter')
+const editingPurchaseId = ref<number | null>(null)
+const deletingPurchaseId = ref<number | null>(null)
 
 type RowDiff = {
   key: string
@@ -93,16 +96,13 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
       category: form.category,
       productType: form.productType,
       sizeLabel: form.sizeLabel,
-      fitFeedback: form.fitFeedback || undefined
+      fitFeedback: form.fitFeedback || undefined,
+      notes: form.notes || undefined
     }
   }),
   async onSuccess() {
     await queryCache.invalidateQueries(purchasesQuery)
-    form.brand = ''
-    form.category = ''
-    form.productType = ''
-    form.sizeLabel = ''
-    form.fitFeedback = ''
+    resetForm()
     toast.add({ title: 'Compra guardada con snapshot de medidas.' })
   },
   onError(err) {
@@ -121,6 +121,65 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
   }
 })
 
+const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
+  mutation: (purchaseId: number) => $fetch(`/api/purchases/${purchaseId}`, {
+    method: 'PATCH',
+    body: {
+      brand: form.brand,
+      category: form.category,
+      productType: form.productType,
+      sizeLabel: form.sizeLabel,
+      fitFeedback: form.fitFeedback || undefined,
+      notes: form.notes || undefined
+    }
+  }),
+  async onSuccess() {
+    await queryCache.invalidateQueries(purchasesQuery)
+    resetForm()
+    toast.add({ title: 'Compra actualizada correctamente.' })
+  },
+  onError(err) {
+    if (isNuxtZodError(err)) {
+      const title = err.data?.data.issues.map(issue => issue.message).join('\n')
+      if (title) {
+        toast.add({ title, color: 'error' })
+      }
+      return
+    }
+
+    const message = err && typeof err === 'object' && 'data' in err
+      ? (err.data as { message?: string } | undefined)?.message
+      : undefined
+    toast.add({ title: message ?? 'No se pudo actualizar la compra.', color: 'error' })
+  }
+})
+
+const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
+  mutation: (purchase: Purchase) => $fetch(`/api/purchases/${purchase.id}`, {
+    method: 'DELETE'
+  }),
+  async onSuccess(_deleted, purchase) {
+    await queryCache.invalidateQueries(purchasesQuery)
+
+    if (selectedPurchase.value?.id === purchase.id) {
+      selectedPurchase.value = null
+      selectedComparison.value = null
+    }
+
+    if (editingPurchaseId.value === purchase.id) {
+      resetForm()
+    }
+
+    toast.add({ title: 'Compra eliminada.' })
+  },
+  onSettled() {
+    deletingPurchaseId.value = null
+  },
+  onError() {
+    toast.add({ title: 'No se pudo eliminar la compra.', color: 'error' })
+  }
+})
+
 const { mutate: comparePurchase, isLoading: comparing } = useMutation({
   mutation: (purchase: Purchase) => $fetch<ComparisonResult>(`/api/purchases/${purchase.id}/compare`),
   onSuccess(data, purchase) {
@@ -133,6 +192,47 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
 })
 
 const purchaseList = computed(() => (purchases.value ?? []) as Purchase[])
+
+const isSubmitting = computed(() => addingPurchase.value || editingPurchase.value)
+
+const resetForm = () => {
+  form.brand = ''
+  form.category = ''
+  form.productType = ''
+  form.sizeLabel = ''
+  form.fitFeedback = ''
+  form.notes = ''
+  editingPurchaseId.value = null
+}
+
+const startEditing = (purchase: Purchase) => {
+  editingPurchaseId.value = purchase.id
+  form.brand = purchase.brand
+  form.category = purchase.category
+  form.productType = purchase.productType
+  form.sizeLabel = purchase.sizeLabel
+  form.fitFeedback = purchase.fitFeedback ?? ''
+  form.notes = purchase.notes ?? ''
+}
+
+const savePurchase = () => {
+  if (editingPurchaseId.value) {
+    editPurchase(editingPurchaseId.value)
+    return
+  }
+
+  addPurchase()
+}
+
+const confirmAndDelete = (purchase: Purchase) => {
+  const confirmed = window.confirm(`¿Eliminar la compra de ${purchase.brand} (${purchase.productType}, talla ${purchase.sizeLabel})?`)
+  if (!confirmed) {
+    return
+  }
+
+  deletingPurchaseId.value = purchase.id
+  removePurchase(purchase)
+}
 
 const filteredPurchaseList = computed(() => {
   const term = historyFilter.value.trim().toLowerCase()
@@ -214,7 +314,7 @@ const diffRows = computed<RowDiff[]>(() => {
 
     <form
       class="grid grid-cols-1 sm:grid-cols-2 gap-3"
-      @submit.prevent="addPurchase()"
+      @submit.prevent="savePurchase()"
     >
       <UInput
         v-model="form.brand"
@@ -241,15 +341,30 @@ const diffRows = computed<RowDiff[]>(() => {
         v-model="form.fitFeedback"
         placeholder="Feedback de ajuste (opcional)"
       />
+      <UInput
+        v-model="form.notes"
+        class="sm:col-span-2"
+        placeholder="Notas (opcional)"
+      />
 
-      <div class="sm:col-span-2">
+      <div class="sm:col-span-2 flex flex-wrap gap-2">
         <UButton
           type="submit"
-          icon="i-lucide-shopping-cart"
-          :loading="addingPurchase"
+          :icon="editingPurchaseId ? 'i-lucide-save' : 'i-lucide-shopping-cart'"
+          :loading="isSubmitting"
           :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel"
         >
-          Guardar compra
+          {{ editingPurchaseId ? 'Guardar cambios' : 'Guardar compra' }}
+        </UButton>
+        <UButton
+          v-if="editingPurchaseId"
+          type="button"
+          variant="soft"
+          color="neutral"
+          icon="i-lucide-x"
+          @click="resetForm"
+        >
+          Cancelar edición
         </UButton>
       </div>
     </form>
@@ -284,14 +399,33 @@ const diffRows = computed<RowDiff[]>(() => {
             </p>
           </div>
 
-          <UButton
-            variant="soft"
-            icon="i-lucide-git-compare"
-            :loading="comparing && selectedPurchase?.id === purchase.id"
-            @click="comparePurchase(purchase)"
-          >
-            Comparar con mis medidas actuales
-          </UButton>
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              variant="soft"
+              color="neutral"
+              icon="i-lucide-pencil"
+              @click="startEditing(purchase)"
+            >
+              Editar
+            </UButton>
+            <UButton
+              color="error"
+              variant="soft"
+              icon="i-lucide-trash"
+              :loading="deletingPurchase && deletingPurchaseId === purchase.id"
+              @click="confirmAndDelete(purchase)"
+            >
+              Eliminar
+            </UButton>
+            <UButton
+              variant="soft"
+              icon="i-lucide-git-compare"
+              :loading="comparing && selectedPurchase?.id === purchase.id"
+              @click="comparePurchase(purchase)"
+            >
+              Comparar con mis medidas actuales
+            </UButton>
+          </div>
         </li>
       </ul>
       <p
