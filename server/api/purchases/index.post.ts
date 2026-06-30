@@ -1,5 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { useValidatedBody, z } from 'h3-zod'
+import { getUserPurchaseCount, isAtLimit } from '../../utils/tiers'
+import { tables, useDB } from '../../utils/db'
 
 export default eventHandler(async (event) => {
   const input = await useValidatedBody(event, {
@@ -13,6 +15,16 @@ export default eventHandler(async (event) => {
     measurementId: z.coerce.number().int().positive().optional()
   })
   const { user } = await requireUserSession(event)
+
+  // Check purchase limit based on user tier
+  const purchaseCount = await getUserPurchaseCount(user.id)
+  if (isAtLimit(user.tier || 'free', purchaseCount)) {
+    throw createError({
+      statusCode: 403,
+      message: 'Purchase limit reached for your tier. Please upgrade to continue.',
+      data: { upgradeUrl: '/account' }
+    })
+  }
 
   let measurement = null
   if (input.measurementId) {

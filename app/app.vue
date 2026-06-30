@@ -17,7 +17,7 @@ const isDarkMode = computed({
 })
 
 useHead({
-  htmlAttrs: { lang: 'en' },
+  htmlAttrs: { lang: 'es' },
   link: [{ rel: 'icon', href: '/icon.png' }]
 })
 
@@ -31,15 +31,26 @@ useSeoMeta({
   twitterCard: 'summary_large_image'
 })
 
-const items = [
-  [
-    {
-      label: 'Logout',
-      icon: 'i-lucide-log-out',
-      onSelect: clear
-    }
-  ]
-] satisfies DropdownMenuItem[][]
+const items = computed(() => {
+  if (!user.value) {
+    return [] as DropdownMenuItem[][]
+  }
+
+  return [
+    [
+      {
+        label: 'Ajustes de la cuenta',
+        icon: 'i-lucide-user-cog',
+        to: '/account'
+      },
+      {
+        label: 'Cerrar sesión',
+        icon: 'i-lucide-log-out',
+        onSelect: clear
+      }
+    ]
+  ] satisfies DropdownMenuItem[][]
+})
 </script>
 
 <template>
@@ -119,6 +130,14 @@ const items = [
               icon="i-lucide-sparkles"
               label="Tareas Optimistas"
               :color="$route.path === '/optimistic-todos' ? 'primary' : 'neutral'"
+              variant="ghost"
+            />
+            <UButton
+              v-if="user?.role === 'admin'"
+              to="/admin/users"
+              icon="i-lucide-shield"
+              label="Usuarios"
+              :color="$route.path.startsWith('/admin/users') ? 'primary' : 'neutral'"
               variant="ghost"
             />
             <UDropdownMenu

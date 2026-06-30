@@ -11,6 +11,14 @@ export default defineNuxtConfig({
     enabled: process.env.NUXT_DEV_SERVER === 'true'
   },
   css: ['~/assets/main.css'],
+  runtimeConfig: {
+    stripeSecretKey: '',
+    stripeWebhookSecret: '',
+    adminUserIds: process.env.ADMIN_USER_IDS || 'soldeplat@gmail.com,10578392',
+    public: {
+      stripePublishableKey: ''
+    }
+  },
   sourcemap: process.env.NUXT_DEV_SERVER === 'true' ? { server: true, client: true } : false,
   future: { compatibilityVersion: 4 },
   compatibilityDate: '2025-12-20',

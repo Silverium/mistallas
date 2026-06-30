@@ -1,5 +1,18 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  tier: text('tier', { enum: ['free', 'premium', 'enterprise'] }).notNull().default('free'),
+  role: text('role', { enum: ['user', 'admin'] }).notNull().default('user'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  subscriptionStatus: text('subscription_status', { enum: ['active', 'cancelled', 'past_due'] }),
+  loginProvider: text('login_provider', { enum: ['github', 'google'] }).notNull(),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+})
+
 export const todos = sqliteTable('todos', {
   id: integer('id').primaryKey(),
   // allow either numeric or string GitHub identifier
