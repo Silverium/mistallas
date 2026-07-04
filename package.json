@@ -12,6 +12,7 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:deploy": "pnpm db:generate && pnpm db:migrate:remote",
     "lint": "eslint .",
+    "test": "vitest run",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "@types/node": "^25.0.3",
     "eslint": "^9.29.0",
     "typescript": "^5.8.3",
+    "vitest": "^2.1.8",
     "wrangler": "^4.20.1"
   },
   "packageManager": "pnpm@10.12.1",

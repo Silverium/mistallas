@@ -15,6 +15,13 @@ export default defineNuxtConfig({
     stripeSecretKey: '',
     stripeWebhookSecret: '',
     adminUserIds: process.env.ADMIN_USER_IDS || 'soldeplat@gmail.com,10578392',
+    tierLimits: {
+      free: Number(process.env.NUXT_TIER_LIMIT_FREE ?? 200),
+      premium: Number(process.env.NUXT_TIER_LIMIT_PREMIUM ?? 5000),
+      enterprise: process.env.NUXT_TIER_LIMIT_ENTERPRISE === 'infinity'
+        ? Infinity
+        : Number(process.env.NUXT_TIER_LIMIT_ENTERPRISE ?? Infinity)
+    },
     public: {
       stripePublishableKey: ''
     }
