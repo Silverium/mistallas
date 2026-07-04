@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare
+name: Tests
 on:
   push:
     branches:
@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: "Deploy to Cloudflare"
+  test:
+    name: "Run Tests"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -15,17 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Enable Corepack pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: 'pnpm'
-
-      - name: Enable Corepack pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.12.1 --activate
-          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
