@@ -11,14 +11,28 @@ watch(loggedIn, () => {
 })
 
 const isDarkMode = computed({
-  get: () => colorMode.preference === 'dark',
-  set: () =>
-    (colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark')
+  get: () => colorMode.value === 'dark',
+  set: (value) => {
+    colorMode.preference = value ? 'dark' : 'light'
+  }
 })
+
+const toggleDarkMode = () => {
+  isDarkMode.value = !isDarkMode.value
+}
 
 useHead({
   htmlAttrs: { lang: 'es' },
-  link: [{ rel: 'icon', href: '/icon.png' }]
+  link: [
+    { rel: 'icon', type: 'image/png', href: '/favicon/favicon-96x96.png', sizes: '96x96' },
+    { rel: 'icon', type: 'image/svg+xml', href: '/favicon/favicon.svg' },
+    { rel: 'shortcut icon', href: '/favicon/favicon.ico' },
+    { rel: 'apple-touch-icon', sizes: '180x180', href: '/favicon/apple-touch-icon.png' },
+    { rel: 'manifest', href: '/favicon/site.webmanifest' }
+  ],
+  meta: [
+    { name: 'apple-mobile-web-app-title', content: 'Mis Tallas' }
+  ]
 })
 
 useSeoMeta({
@@ -64,7 +78,7 @@ const items = computed(() => {
             ? 'i-lucide-moon'
             : 'i-lucide-sun'
           "
-          @click="isDarkMode = !isDarkMode"
+          @click="toggleDarkMode"
         >
           {{ isDarkMode ? 'Claro' : 'Oscuro' }}
         </UButton>
