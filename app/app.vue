@@ -55,7 +55,7 @@ const items = computed(() => {
 
 <template>
   <UApp>
-    <UContainer class="min-h-screen flex flex-col my-4">
+    <UContainer class="min-h-screen flex flex-col">
       <div class="mb-2 text-right">
         <UButton
           square
@@ -162,7 +162,7 @@ const items = computed(() => {
         <NuxtPage />
       </UCard>
 
-      <footer class="text-center mt-2">
+      <footer class="text-center mt-auto">
         <NuxtLink
           href="https://github.com/silverium/mistallas"
           target="_blank"
