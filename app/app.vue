@@ -69,7 +69,7 @@ const items = computed(() => {
 
 <template>
   <UApp>
-    <UContainer class="min-h-screen flex flex-col">
+    <UContainer class="flex min-h-dvh flex-col">
       <div class="mb-2 text-right">
         <UButton
           square
