@@ -148,10 +148,10 @@ const items = computed(() => {
             />
             <UButton
               v-if="user?.role === 'admin'"
-              to="/admin/users"
+              to="/admin"
               icon="i-lucide-shield"
-              label="Usuarios"
-              :color="$route.path.startsWith('/admin/users') ? 'primary' : 'neutral'"
+              label="Admin"
+              :color="$route.path.startsWith('/admin') ? 'primary' : 'neutral'"
               variant="ghost"
             />
             <UDropdownMenu
