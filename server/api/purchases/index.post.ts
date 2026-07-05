@@ -12,7 +12,8 @@ export default eventHandler(async (event) => {
     purchasedAt: z.coerce.date().optional(),
     fitFeedback: z.string().min(1).max(120).optional(),
     notes: z.string().max(500).optional(),
-    measurementId: z.coerce.number().int().positive().optional()
+    measurementId: z.coerce.number().int().positive().optional(),
+    price: z.coerce.number().min(0).optional()
   })
   const { user } = await requireUserSession(event)
 
@@ -52,7 +53,8 @@ export default eventHandler(async (event) => {
     sizeLabel: input.sizeLabel,
     purchasedAt: input.purchasedAt ?? new Date(),
     fitFeedback: input.fitFeedback ?? null,
-    notes: input.notes ?? null
+    notes: input.notes ?? null,
+    price: input.price ?? null
   }).returning().get()
 
   const snapshot = await useDB().insert(tables.purchaseMeasurementSnapshots).values({

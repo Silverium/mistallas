@@ -11,7 +11,8 @@ export default eventHandler(async (event) => {
     productType: z.string().min(1).max(120),
     sizeLabel: z.string().min(1).max(30),
     fitFeedback: z.string().min(1).max(120).optional(),
-    notes: z.string().max(500).optional()
+    notes: z.string().max(500).optional(),
+    price: z.coerce.number().min(0).optional()
   })
   const { user } = await requireUserSession(event)
 
@@ -21,7 +22,8 @@ export default eventHandler(async (event) => {
     productType: input.productType,
     sizeLabel: input.sizeLabel,
     fitFeedback: input.fitFeedback ?? null,
-    notes: input.notes ?? null
+    notes: input.notes ?? null,
+    price: input.price ?? null
   }).where(and(
     eq(tables.purchaseEvents.id, id),
     eq(tables.purchaseEvents.userId, user.id)
