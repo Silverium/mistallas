@@ -28,7 +28,7 @@ const onGitHubOAuthSuccess: NonNullable<Parameters<typeof defineOAuthGitHubEvent
 
     let dbUser
     if (existingUser) {
-    // Update existing user's updatedAt timestamp
+      // Update existing user's updatedAt timestamp and promote to admin if configured
       dbUser = await db
         .update(tables.users)
         .set({
@@ -41,7 +41,7 @@ const onGitHubOAuthSuccess: NonNullable<Parameters<typeof defineOAuthGitHubEvent
         .get()
     }
     else {
-    // Create new user with free tier
+      // Create new user with free tier
       dbUser = await db
         .insert(tables.users)
         .values({
@@ -83,7 +83,8 @@ const onGitHubOAuthSuccess: NonNullable<Parameters<typeof defineOAuthGitHubEvent
 
 export default eventHandler((event) => {
   const query = getQuery(event)
-  if (!query.code && !query.error) {
+  // Initial OAuth request detection: callback requests include `state` and/or `code`/`error` query params.
+  if (!query.code && !query.error && !query.state) {
     setOAuthReturnHostCookie(event)
   }
 

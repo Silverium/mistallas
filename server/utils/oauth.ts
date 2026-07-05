@@ -3,17 +3,24 @@ import { deleteCookie, getCookie, getRequestURL, setCookie } from 'h3'
 
 export const WORKERS_BASE_HOST = 'mistallas.workers.dev'
 const OAUTH_RETURN_HOST_COOKIE = 'oauth-return-host'
+// Keep short-lived metadata only for active OAuth handshakes (10 minutes).
+const OAUTH_RETURN_HOST_MAX_AGE_SECONDS = 60 * 10
 const OAUTH_RETURN_HOST_COOKIE_OPTIONS = {
   path: '/',
   httpOnly: true,
   sameSite: 'lax' as const,
   secure: true,
-  maxAge: 60 * 10,
+  maxAge: OAUTH_RETURN_HOST_MAX_AGE_SECONDS,
   domain: `.${WORKERS_BASE_HOST}`
 }
 
 export function normalizeHost(host: string): string {
-  return host.split(':', 1)[0].trim().toLowerCase()
+  try {
+    return new URL(`http://${host}`).hostname.toLowerCase()
+  }
+  catch {
+    return host.trim().toLowerCase()
+  }
 }
 
 export function isTrustedWorkersHost(host: string): boolean {
@@ -22,8 +29,7 @@ export function isTrustedWorkersHost(host: string): boolean {
 }
 
 export function isTrustedWorkersSubdomain(host: string): boolean {
-  const normalizedHost = normalizeHost(host)
-  return normalizedHost !== WORKERS_BASE_HOST && normalizedHost.endsWith(`.${WORKERS_BASE_HOST}`)
+  return isTrustedWorkersHost(host) && normalizeHost(host) !== WORKERS_BASE_HOST
 }
 
 export function getOAuthRedirectURLForHost(host: string, provider: 'github' | 'google'): string | undefined {
@@ -53,11 +59,11 @@ export function setOAuthReturnHostCookie(event: H3Event): void {
 
 export function consumeOAuthReturnHostCookie(event: H3Event): string | undefined {
   const host = getCookie(event, OAUTH_RETURN_HOST_COOKIE)
-  deleteCookie(event, OAUTH_RETURN_HOST_COOKIE, OAUTH_RETURN_HOST_COOKIE_OPTIONS)
 
   if (!host || !isTrustedWorkersSubdomain(host)) {
     return undefined
   }
 
+  deleteCookie(event, OAUTH_RETURN_HOST_COOKIE, OAUTH_RETURN_HOST_COOKIE_OPTIONS)
   return normalizeHost(host)
 }
