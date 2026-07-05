@@ -35,23 +35,28 @@ const openPurchasesWithFilter = () => {
       </UButton>
     </form>
 
-    <p class="font-medium">
+    <p
+      v-if="!loggedIn"
+      class="font-medium"
+    >
       Hola: ¿Te acuerdas de la talla y modelo de pantalones que necesitas de esa marca que cambia el tallaje incluso cuando se elije otro color del pantalón?
     </p>
-    <p>
+    <p v-if="!loggedIn">
       ¿O de la talla de zapatos que usas en esa tienda online extranjera que siempre talla diferente?
     </p>
-    <p>
+    <p v-if="!loggedIn">
       Esta es una aplicación sencilla para gestionar tus tallas de ropa, calzado y accesorios.
       <template v-if="!loggedIn">
-        Inicia sesión con tu cuenta de GitHub para comenzar a guardar y administrar tus tallas de manera segura.
+        Inicia sesión para comenzar a guardar y administrar tus tallas de manera segura.
       </template>
     </p>
 
     <USeparator />
-    <p class="text-sm text-muted italic">
+    <p
+      v-if="!loggedIn"
+      class="text-sm text-muted italic"
+    >
       No se almacena ninguna información personal de tu cuenta de GitHub en la base de datos.<br>
-      Solo almacenamos los todos que creas vinculados con tu ID de GitHub.
     </p>
   </div>
 </template>
