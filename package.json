@@ -13,6 +13,7 @@
     "db:deploy": "pnpm db:generate && pnpm db:migrate:remote",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
