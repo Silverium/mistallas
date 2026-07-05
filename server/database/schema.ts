@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -49,7 +49,8 @@ export const purchaseEvents = sqliteTable('purchase_events', {
   sizeLabel: text('size_label').notNull(),
   purchasedAt: integer('purchased_at', { mode: 'timestamp' }).notNull(),
   fitFeedback: text('fit_feedback'),
-  notes: text('notes')
+  notes: text('notes'),
+  price: real('price')
 })
 
 export const purchaseMeasurementSnapshots = sqliteTable('purchase_measurement_snapshots', {

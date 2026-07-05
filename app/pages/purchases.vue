@@ -15,6 +15,7 @@ type Purchase = {
   purchasedAt: string | Date
   fitFeedback?: string | null
   notes?: string | null
+  price?: number | null
 }
 
 type ComparisonResult = {
@@ -63,7 +64,8 @@ const form = reactive({
   productType: '',
   sizeLabel: '',
   fitFeedback: '',
-  notes: ''
+  notes: '',
+  price: ''
 })
 
 const selectedComparison = ref<ComparisonResult | null>(null)
@@ -98,7 +100,8 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
       productType: form.productType,
       sizeLabel: form.sizeLabel,
       fitFeedback: form.fitFeedback || undefined,
-      notes: form.notes || undefined
+      notes: form.notes || undefined,
+      price: form.price ? Number(form.price) : undefined
     }
   }),
   async onSuccess() {
@@ -131,7 +134,8 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
       productType: form.productType,
       sizeLabel: form.sizeLabel,
       fitFeedback: form.fitFeedback || undefined,
-      notes: form.notes || undefined
+      notes: form.notes || undefined,
+      price: form.price ? Number(form.price) : undefined
     }
   }),
   async onSuccess() {
@@ -203,6 +207,7 @@ const resetForm = () => {
   form.sizeLabel = ''
   form.fitFeedback = ''
   form.notes = ''
+  form.price = ''
   editingPurchaseId.value = null
   isPurchaseFormVisible.value = false
 }
@@ -216,6 +221,7 @@ const startEditing = (purchase: Purchase) => {
   form.sizeLabel = purchase.sizeLabel
   form.fitFeedback = purchase.fitFeedback ?? ''
   form.notes = purchase.notes ?? ''
+  form.price = purchase.price != null ? String(purchase.price) : ''
 }
 
 const savePurchase = () => {
@@ -356,6 +362,13 @@ const diffRows = computed<RowDiff[]>(() => {
         placeholder="Feedback de ajuste (opcional)"
       />
       <UInput
+        v-model="form.price"
+        type="number"
+        min="0"
+        step="0.01"
+        placeholder="Precio (opcional)"
+      />
+      <UInput
         v-model="form.notes"
         class="sm:col-span-2"
         placeholder="Notas (opcional)"
@@ -413,7 +426,9 @@ const diffRows = computed<RowDiff[]>(() => {
               {{ purchase.brand }} · {{ purchase.productType }} · Talla {{ purchase.sizeLabel }}
             </p>
             <p class="text-sm text-muted">
-              {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}
+              {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template v-if="purchase.price != null">
+                · {{ purchase.price.toFixed(2) }} €
+              </template>
             </p>
             <p
               v-if="purchase.notes || purchase.fitFeedback"
