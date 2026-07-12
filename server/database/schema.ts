@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -71,3 +71,20 @@ export const purchaseMeasurementSnapshots = sqliteTable('purchase_measurement_sn
   thighCm: integer('thigh_cm_x10'),
   footCm: integer('foot_cm_x10')
 })
+
+export const purchasePhotos = sqliteTable('purchase_photos', {
+  id: integer('id').primaryKey(),
+  purchaseEventId: integer('purchase_event_id').notNull(),
+  userId: text('user_id').notNull().$type<number | string>(),
+  storageKey: text('storage_key').notNull(),
+  slot: integer('slot', { mode: 'number' }).notNull(), // 1, 2, or 3
+  mimeType: text('mime_type').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  bytes: real('bytes'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+}, table => ({
+  purchaseEventSlotUnique: uniqueIndex('purchase_photos_purchase_event_slot_unique').on(table.purchaseEventId, table.slot),
+  purchaseEventIdIdx: index('purchase_photos_purchase_event_id_idx').on(table.purchaseEventId),
+  userIdIdx: index('purchase_photos_user_id_idx').on(table.userId)
+}))

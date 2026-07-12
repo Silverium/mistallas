@@ -24,6 +24,12 @@
 			"migrations_dir": "server/db/migrations"
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "PURCHASE_PHOTOS",
+			"bucket_name": "mistallas-purchase-photos"
+		}
+	],
 	"env": {
 		"local": {
 			"d1_databases": [

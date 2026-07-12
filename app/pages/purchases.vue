@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { purchasesQuery } from '~/queries/purchases'
+import { isNuxtZodError } from '~/utils/errors'
+import { blobToBase64, compressImage } from '~/utils/image-compression'
+import { measurementSpecs } from '~/utils/measurementSpecs'
 import { useSyncedStringQueryParam } from '~/utils/query-param'
 
 definePageMeta({
@@ -36,6 +39,16 @@ type ComparisonResult = {
   }
 }
 
+type PurchasePhoto = {
+  id: number
+  slot: number
+  mimeType: string
+  width: number | null
+  height: number | null
+  bytes: number | null
+  createdAt: string | Date | null
+}
+
 const toast = useToast()
 const queryCache = useQueryCache()
 
@@ -51,6 +64,8 @@ const form = reactive({
 
 const selectedComparison = ref<ComparisonResult | null>(null)
 const selectedPurchase = ref<Purchase | null>(null)
+const selectedPhotoPurchaseId = ref<number | null>(null)
+const photoInput = ref<HTMLInputElement | null>(null)
 const historyFilter = useSyncedStringQueryParam('filter')
 const editingPurchaseId = ref<number | null>(null)
 const deletingPurchaseId = ref<number | null>(null)
@@ -152,6 +167,10 @@ const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
       selectedComparison.value = null
     }
 
+    if (selectedPhotoPurchaseId.value === purchase.id) {
+      selectedPhotoPurchaseId.value = null
+    }
+
     if (editingPurchaseId.value === purchase.id) {
       resetForm()
     }
@@ -176,6 +195,85 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
     toast.add({ title: 'No se pudo generar la comparación.', color: 'error' })
   }
 })
+
+const { data: photoList, refresh: refreshPhotos, isLoading: photosLoading } = useQuery({
+  key: ['purchase-photos'],
+  query: () => {
+    if (!selectedPhotoPurchaseId.value) {
+      return [] as PurchasePhoto[]
+    }
+
+    return $fetch<PurchasePhoto[]>(`/api/purchases/${selectedPhotoPurchaseId.value}/photos`)
+  },
+  enabled: () => !!selectedPhotoPurchaseId.value
+})
+
+const openPhotosForPurchase = async (purchase: Purchase) => {
+  if (selectedPhotoPurchaseId.value === purchase.id) {
+    selectedPhotoPurchaseId.value = null
+    return
+  }
+
+  selectedPhotoPurchaseId.value = purchase.id
+  await refreshPhotos()
+}
+
+const triggerPhotoPicker = () => {
+  photoInput.value?.click()
+}
+
+const uploadPhotoFile = async (purchaseId: number, file: File) => {
+  if (!purchaseId) {
+    toast.add({ title: 'Selecciona una compra primero', color: 'warning' })
+    return
+  }
+
+  try {
+    const compressedBlob = await compressImage(file)
+    const fileBase64 = await blobToBase64(compressedBlob)
+
+    await $fetch(`/api/purchases/${purchaseId}/photos`, {
+      method: 'POST',
+      body: {
+        fileBase64,
+        mimeType: compressedBlob.type || 'image/webp'
+      }
+    })
+
+    toast.add({ title: 'Foto subida' })
+    await refreshPhotos()
+  }
+  catch {
+    toast.add({ title: 'Error al subir foto', color: 'error' })
+  }
+}
+
+const onPhotoInputChange = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+
+  if (!file || !selectedPhotoPurchaseId.value) {
+    return
+  }
+
+  await uploadPhotoFile(selectedPhotoPurchaseId.value, file)
+  input.value = ''
+}
+
+const deletePhoto = async (purchaseId: number, slot: number) => {
+  if (!confirm('¿Eliminar esta foto?')) return
+
+  try {
+    await $fetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
+      method: 'DELETE'
+    })
+    toast.add({ title: 'Foto eliminada' })
+    await refreshPhotos()
+  }
+  catch {
+    toast.add({ title: 'Error al eliminar foto', color: 'error' })
+  }
+}
 
 const purchaseList = computed(() => (purchases.value ?? []) as Purchase[])
 
@@ -258,6 +356,8 @@ const filteredPurchaseList = computed(() => {
   })
 })
 
+const filteredPhotoList = computed(() => (photoList.value ?? []) as PurchasePhoto[])
+
 const fmt = (value: number, unit: string) => `${value.toFixed(1)} ${unit}`
 
 const diffRows = computed<RowDiff[]>(() => {
@@ -294,6 +394,21 @@ const diffRows = computed<RowDiff[]>(() => {
 
 <template>
   <div class="flex flex-col gap-6">
+    <label
+      for="purchase-photo-input"
+      class="sr-only"
+    >
+      Subir foto de compra
+    </label>
+    <input
+      id="purchase-photo-input"
+      ref="photoInput"
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      class="hidden"
+      @change="onPhotoInputChange"
+    >
+
     <div>
       <h2 class="text-lg font-semibold">
         Compras
@@ -440,6 +555,63 @@ const diffRows = computed<RowDiff[]>(() => {
             >
               Eliminar
             </UButton>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <UButton
+                type="button"
+                icon="i-lucide-camera"
+                color="neutral"
+                variant="soft"
+                @click="openPhotosForPurchase(purchase)"
+              >
+                {{ selectedPhotoPurchaseId === purchase.id ? 'Ocultar fotos' : 'Gestionar fotos' }}
+              </UButton>
+
+              <UButton
+                v-if="selectedPhotoPurchaseId === purchase.id"
+                type="button"
+                icon="i-lucide-upload"
+                color="neutral"
+                variant="soft"
+                @click="triggerPhotoPicker"
+              >
+                Subir foto
+              </UButton>
+
+              <div
+                v-if="selectedPhotoPurchaseId === purchase.id"
+                class="flex gap-2"
+              >
+                <div
+                  v-for="item in filteredPhotoList"
+                  :key="item.id"
+                  class="relative group"
+                >
+                  <UAvatar
+                    :src="`/api/purchases/${purchase.id}/photos/${item.slot}`"
+                    size="lg"
+                    square
+                  />
+                  <UButton
+                    class="absolute top-0 right-0 opacity-0 group-hover:opacity-100"
+                    color="error"
+                    variant="ghost"
+                    icon="i-lucide-x"
+                    size="xs"
+                    @click="deletePhoto(purchase.id, item.slot)"
+                  />
+                </div>
+
+                <UBadge
+                  v-if="photosLoading"
+                  color="neutral"
+                  variant="subtle"
+                >
+                  Cargando...
+                </UBadge>
+              </div>
+            </div>
+
             <UButton
               variant="soft"
               icon="i-lucide-git-compare"
