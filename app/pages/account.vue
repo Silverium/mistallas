@@ -77,64 +77,37 @@
             Mejora tu plan
           </h2>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- Free Tier -->
             <div
+              v-for="tier in tiers"
+              :key="tier.tier"
               :class="[
                 'p-4 border-2 rounded-lg',
-                profile.tier === 'free' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                profile.tier === tier.tier ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
               ]"
             >
               <p class="text-lg font-semibold text-gray-900">
-                Gratis
+                {{ tier.label }}
               </p>
               <p class="text-2xl font-bold text-gray-900 mt-2">
-                $0
+                {{ tier.price }}€
               </p>
               <p class="text-sm text-gray-600 mt-1">
-                200 compras/mes
+                {{ tier.limit === Infinity ? 'Compras ilimitadas' : `${tier.limit} compras` }}
               </p>
               <button
-                v-if="profile.tier !== 'free'"
-                :disabled="downgrading"
-                class="w-full mt-4 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                @click="downgrade('free')"
+                v-if="profile.tier !== tier.tier"
+                :disabled="upgrading || downgrading"
+                :class="[
+                  'w-full mt-4 px-4 py-2 rounded-lg disabled:opacity-50',
+                  tier.tier === 'free' ? 'border border-gray-300 hover:bg-gray-50' : tier.tier === 'enterprise' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-blue-600 text-white hover:bg-blue-700'
+                ]"
+                @click="isTierUpgrade(profile.tier, tier.tier) ? upgrade(tier.tier) : downgrade(tier.tier)"
               >
-                {{ downgrading ? 'Cambiando...' : 'Bajar plan' }}
-              </button>
-              <p
-                v-else
-                class="w-full mt-4 text-center text-sm text-gray-600"
-              >
-                Plan actual
-              </p>
-            </div>
-
-            <!-- Premium Tier -->
-            <div
-              :class="[
-                'p-4 border-2 rounded-lg',
-                profile.tier === 'premium' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-              ]"
-            >
-              <p class="text-lg font-semibold text-gray-900">
-                Premium
-              </p>
-              <p class="text-2xl font-bold text-gray-900 mt-2">
-                $9.99
-              </p>
-              <p class="text-sm text-gray-600 mt-1">
-                /mes
-              </p>
-              <p class="text-sm text-gray-600 mt-1">
-                5.000 compras/mes
-              </p>
-              <button
-                v-if="profile.tier !== 'premium'"
-                :disabled="upgrading"
-                class="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                @click="upgrade('premium')"
-              >
-                {{ upgrading ? 'Redirigiendo...' : 'Mejorar a Premium' }}
+                {{
+                  isTierUpgrade(profile.tier, tier.tier)
+                    ? upgrading ? 'Redirigiendo...' : 'Mejorar plan'
+                    : downgrading ? 'Cambiando...' : 'Bajar plan'
+                }}
               </button>
               <p
                 v-else
@@ -143,55 +116,12 @@
                 Plan actual
               </p>
               <button
-                v-if="profile.tier === 'premium' && profile.subscriptionStatus === 'active'"
+                v-if="profile.tier === tier.tier && profile.subscriptionStatus === 'active' && tier.tier !== 'free'"
                 :disabled="downgrading"
                 class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
-                @click="downgrade('free')"
+                @click="downgrade(tier.tier === 'enterprise' ? 'premium' : 'free')"
               >
-                {{ downgrading ? 'Cambiando...' : 'Bajar plan' }}
-              </button>
-            </div>
-
-            <!-- Enterprise Tier -->
-            <div
-              :class="[
-                'p-4 border-2 rounded-lg',
-                profile.tier === 'enterprise' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-              ]"
-            >
-              <p class="text-lg font-semibold text-gray-900">
-                Empresarial
-              </p>
-              <p class="text-2xl font-bold text-gray-900 mt-2">
-                $29.99
-              </p>
-              <p class="text-sm text-gray-600 mt-1">
-                /mes
-              </p>
-              <p class="text-sm text-gray-600 mt-1">
-                Compras ilimitadas
-              </p>
-              <button
-                v-if="profile.tier !== 'enterprise'"
-                :disabled="upgrading"
-                class="w-full mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
-                @click="upgrade('enterprise')"
-              >
-                {{ upgrading ? 'Redirigiendo...' : 'Mejorar a Empresarial' }}
-              </button>
-              <p
-                v-else
-                class="w-full mt-4 text-center text-sm text-gray-600"
-              >
-                Plan actual
-              </p>
-              <button
-                v-if="profile.tier === 'enterprise' && profile.subscriptionStatus === 'active'"
-                :disabled="downgrading"
-                class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
-                @click="downgrade('premium')"
-              >
-                {{ downgrading ? 'Cambiando...' : 'Bajar a Premium' }}
+                {{ downgrading ? 'Cambiando...' : `Bajar ${tier.tier === 'enterprise' ? 'a Premium' : 'plan'}` }}
               </button>
             </div>
           </div>
@@ -249,12 +179,31 @@ interface UserProfile {
   subscriptionStatus: string | null
 }
 
+interface TierInfo {
+  tier: 'free' | 'premium' | 'enterprise'
+  label: string
+  price: number
+  limit: number
+}
+
 const profile = ref<UserProfile>({
   tier: 'free',
   purchaseCount: 0,
   limit: 200,
   subscriptionStatus: null
 })
+
+const tiers = ref<TierInfo[]>([
+  { tier: 'free', label: 'Gratis', price: 0, limit: 200 },
+  { tier: 'premium', label: 'Premium', price: 1, limit: 500 },
+  { tier: 'enterprise', label: 'Empresarial', price: 10, limit: Infinity }
+])
+
+const tierOrder = ['free', 'premium', 'enterprise'] as const
+
+const isTierUpgrade = (from: string, to: string): boolean => {
+  return tierOrder.indexOf(to as 'free' | 'premium' | 'enterprise') > tierOrder.indexOf(from as 'free' | 'premium' | 'enterprise')
+}
 
 const loading = ref(true)
 const upgrading = ref(false)
@@ -269,8 +218,16 @@ const percentageUsed = computed(() => {
 async function fetchProfile() {
   loading.value = true
   try {
-    const { data } = await useFetch('/api/account/profile')
-    profile.value = data.value || {}
+    const [profileRes, tiersRes] = await Promise.all([
+      useFetch('/api/account/profile'),
+      useFetch('/api/account/tiers')
+    ])
+    if (profileRes.data.value) {
+      profile.value = profileRes.data.value
+    }
+    if (tiersRes.data.value?.tiers) {
+      tiers.value = tiersRes.data.value.tiers
+    }
   }
   catch (err) {
     console.error('Error al cargar perfil:', err)
@@ -291,7 +248,7 @@ async function upgrade(tierName: string) {
       enterprise: 'price_0987654321' // Update with actual price ID
     }
 
-    const { data } = await $fetch('/api/account/upgrade', {
+    const response = await $fetch('/api/account/upgrade', {
       method: 'POST',
       body: {
         targetTier: tierName,
@@ -300,8 +257,9 @@ async function upgrade(tierName: string) {
     })
 
     // Redirect to Stripe checkout
-    if (data?.redirectUrl) {
-      window.location.href = data.redirectUrl
+    const redirectUrl = (response as Record<string, unknown>)?.redirectUrl as string | undefined
+    if (redirectUrl) {
+      window.location.href = redirectUrl
     }
   }
   catch (err) {
@@ -337,8 +295,8 @@ async function downgrade(tierName: string) {
   }
 }
 
-onMounted(() => {
-  fetchProfile()
+onMounted(async () => {
+  await fetchProfile()
 })
 
 function tierLabel(tier: UserProfile['tier']) {

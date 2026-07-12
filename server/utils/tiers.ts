@@ -8,8 +8,8 @@ export type TierLimits = Record<Tier, number>
 
 const DEFAULT_TIER_LIMITS: TierLimits = {
   free: 200,
-  premium: 5000,
-  enterprise: Infinity
+  premium: 500,
+  enterprise: 10_000
 }
 
 function parseLimit(value: unknown, fallback: number): number {
