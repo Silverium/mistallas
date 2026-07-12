@@ -200,6 +200,20 @@ const purchaseList = computed(() => (purchases.value ?? []) as Purchase[])
 
 const isSubmitting = computed(() => addingPurchase.value || editingPurchase.value)
 
+const closeComparisonDialog = () => {
+  selectedPurchase.value = null
+  selectedComparison.value = null
+}
+
+const isComparisonDialogOpen = computed({
+  get: () => Boolean(selectedPurchase.value && selectedComparison.value),
+  set: (isOpen: boolean) => {
+    if (!isOpen) {
+      closeComparisonDialog()
+    }
+  }
+})
+
 const resetForm = () => {
   form.brand = ''
   form.category = ''
@@ -324,7 +338,7 @@ const diffRows = computed<RowDiff[]>(() => {
           v-if="!isPurchaseFormVisible"
           type="button"
           icon="i-lucide-plus"
-          @click="isPurchaseFormVisible = true"
+          @click="() => { isPurchaseFormVisible = true }"
         >
           Añadir compra
         </UButton>
@@ -443,7 +457,7 @@ const diffRows = computed<RowDiff[]>(() => {
               variant="soft"
               color="neutral"
               icon="i-lucide-pencil"
-              class="flex-shrink-0"
+              class="shrink-0"
               @click="startEditing(purchase)"
             >
               Editar
@@ -452,7 +466,7 @@ const diffRows = computed<RowDiff[]>(() => {
               color="error"
               variant="soft"
               icon="i-lucide-trash"
-              class="flex-shrink-0"
+              class="shrink-0"
               :loading="deletingPurchase && deletingPurchaseId === purchase.id"
               @click="confirmAndDelete(purchase)"
             >
@@ -478,76 +492,98 @@ const diffRows = computed<RowDiff[]>(() => {
       </p>
     </div>
 
-    <UAlert
-      v-if="selectedComparison?.highlights?.weight"
-      color="primary"
-      variant="subtle"
-      icon="i-lucide-scale"
-      :title="selectedComparison.highlights.weight"
-    />
+    <UModal v-model:open="isComparisonDialogOpen">
+      <template #content>
+        <div
+          v-if="selectedPurchase && selectedComparison"
+          class="space-y-3 p-4 sm:p-5"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <h3 class="font-medium">
+              Comparativa de medidas · {{ selectedPurchase.brand }} {{ selectedPurchase.productType }} ({{ selectedPurchase.sizeLabel }})
+            </h3>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              @click="closeComparisonDialog"
+            />
+          </div>
 
-    <div
-      v-if="selectedPurchase && selectedComparison"
-      class="space-y-3"
-    >
-      <h3 class="font-medium">
-        Comparativa de medidas · {{ selectedPurchase.brand }} {{ selectedPurchase.productType }} ({{ selectedPurchase.sizeLabel }})
-      </h3>
+          <UAlert
+            v-if="selectedComparison.highlights?.weight"
+            color="primary"
+            variant="subtle"
+            icon="i-lucide-scale"
+            :title="selectedComparison.highlights.weight"
+          />
 
-      <div
-        v-if="diffRows.length"
-        class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800"
-      >
-        <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 dark:bg-gray-900/40">
-            <tr>
-              <th class="text-left px-3 py-2 font-medium">
-                Medida
-              </th>
-              <th class="text-left px-3 py-2 font-medium">
-                Antes
-              </th>
-              <th class="text-left px-3 py-2 font-medium">
-                Ahora
-              </th>
-              <th class="text-left px-3 py-2 font-medium">
-                Cambio
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in diffRows"
-              :key="row.key"
-              class="border-t border-gray-200 dark:border-gray-800"
+          <div
+            v-if="diffRows.length"
+            class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800"
+          >
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 dark:bg-gray-900/40">
+                <tr>
+                  <th class="text-left px-3 py-2 font-medium">
+                    Medida
+                  </th>
+                  <th class="text-left px-3 py-2 font-medium">
+                    Antes
+                  </th>
+                  <th class="text-left px-3 py-2 font-medium">
+                    Ahora
+                  </th>
+                  <th class="text-left px-3 py-2 font-medium">
+                    Cambio
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in diffRows"
+                  :key="row.key"
+                  class="border-t border-gray-200 dark:border-gray-800"
+                >
+                  <td class="px-3 py-2 font-medium">
+                    {{ row.label }}
+                  </td>
+                  <td class="px-3 py-2">
+                    {{ fmt(row.before, row.unit) }}
+                  </td>
+                  <td class="px-3 py-2">
+                    {{ fmt(row.now, row.unit) }}
+                  </td>
+                  <td
+                    class="px-3 py-2"
+                    :class="row.delta > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'"
+                  >
+                    {{ row.delta > 0 ? '+' : '' }}{{ fmt(row.delta, row.unit) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <UAlert
+            v-else
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-check"
+            title="No hay cambios de medidas entre la compra y tu estado actual."
+          />
+
+          <div class="flex justify-end">
+            <UButton
+              color="neutral"
+              variant="soft"
+              @click="closeComparisonDialog"
             >
-              <td class="px-3 py-2 font-medium">
-                {{ row.label }}
-              </td>
-              <td class="px-3 py-2">
-                {{ fmt(row.before, row.unit) }}
-              </td>
-              <td class="px-3 py-2">
-                {{ fmt(row.now, row.unit) }}
-              </td>
-              <td
-                class="px-3 py-2"
-                :class="row.delta > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'"
-              >
-                {{ row.delta > 0 ? '+' : '' }}{{ fmt(row.delta, row.unit) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <UAlert
-        v-else
-        color="neutral"
-        variant="soft"
-        icon="i-lucide-check"
-        title="No hay cambios de medidas entre la compra y tu estado actual."
-      />
-    </div>
+              Cerrar
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
