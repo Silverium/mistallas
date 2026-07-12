@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "dev": "NUXT_DEV_SERVER=true nuxi dev",
+    "dev": "NUXT_DEV_SERVER=true nuxi dev --host 0.0.0.0",
     "dev:local": "nuxt build && wrangler pages dev .output/public",
     "build": "nuxi build",
     "preview": "npx nuxthub preview",
