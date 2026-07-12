@@ -47,6 +47,11 @@
   },
   "packageManager": "pnpm@10.12.1",
   "pnpm": {
+    "overrides": {
+      "baseline-browser-mapping": "2.10.43",
+      "browserslist": "4.28.6",
+      "caniuse-lite": "1.0.30001805"
+    },
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
       "esbuild",

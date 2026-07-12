@@ -2,12 +2,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "mistallas",
 	"keep_vars": true,
-	"main": "./.output/server/index.mjs",
 	"compatibility_date": "2025-12-20",
-	"assets": {
-		"directory": "./.output/public/",
-		"binding": "ASSETS"
-	},
 	"observability": {
 		"enabled": true
 	},
