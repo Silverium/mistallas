@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { purchasesQuery } from '~/queries/purchases'
-import { isNuxtZodError } from '~/utils/errors'
+import { getSpanishApiErrorMessage, isNuxtZodError } from '~/utils/errors'
 import { blobToBase64, compressImage } from '~/utils/image-compression'
 import { measurementSpecs } from '~/utils/measurementSpecs'
 import { useSyncedStringQueryParam } from '~/utils/query-param'
@@ -281,8 +281,11 @@ const uploadPhotoFile = async (purchaseId: number, file: File) => {
     toast.add({ title: 'Foto subida' })
     await refreshPhotos()
   }
-  catch {
-    toast.add({ title: 'Error al subir foto', color: 'error' })
+  catch (err) {
+    toast.add({
+      title: getSpanishApiErrorMessage(err) ?? 'Error al subir foto',
+      color: 'error'
+    })
   }
 }
 
