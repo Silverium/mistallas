@@ -207,6 +207,13 @@ const items = computed(() => {
 
 <style lang="postcss">
 body {
-  @apply font-sans text-neutral-950 bg-neutral-50 dark:bg-neutral-950 dark:text-neutral-50;
+  font-family: var(--font-sans);
+  color: #0a0a0a;
+  background-color: #fafafa;
+}
+
+html.dark body {
+  color: #fafafa;
+  background-color: #0a0a0a;
 }
 </style>
