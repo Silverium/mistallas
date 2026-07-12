@@ -36,6 +36,7 @@ export const userMeasurements = sqliteTable('user_measurements', {
   neckCm: integer('neck_cm_x10'),
   inseamCm: integer('inseam_cm_x10'),
   thighCm: integer('thigh_cm_x10'),
+  footCm: integer('foot_cm_x10'),
   source: text('source').notNull().default('manual'),
   notes: text('notes')
 })

@@ -1,0 +1,1 @@
+ALTER TABLE `user_measurements` ADD `foot_cm_x10` integer;

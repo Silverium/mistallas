@@ -16,6 +16,7 @@ export default eventHandler(async (event) => {
     neckCm: z.coerce.number().positive().optional(),
     inseamCm: z.coerce.number().positive().optional(),
     thighCm: z.coerce.number().positive().optional(),
+    footCm: z.coerce.number().positive().optional(),
     source: z.string().min(1).max(30).optional(),
     notes: z.string().max(500).optional()
   })

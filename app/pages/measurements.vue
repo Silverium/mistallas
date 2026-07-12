@@ -19,6 +19,7 @@ type Measurement = {
   inseamCm?: number | null
   thighCm?: number | null
   notes?: string | null
+  footCm?: number | null
 }
 
 const toast = useToast()
@@ -35,6 +36,7 @@ const form = reactive({
   neckCm: '',
   inseamCm: '',
   thighCm: '',
+  footCm: '',
   notes: ''
 })
 
@@ -52,6 +54,7 @@ const resetForm = () => {
   form.neckCm = ''
   form.inseamCm = ''
   form.thighCm = ''
+  form.footCm = ''
   form.notes = ''
   isMeasurementFormVisible.value = false
 }
@@ -77,6 +80,7 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
       neckCm: form.neckCm ? Number(form.neckCm) : undefined,
       inseamCm: form.inseamCm ? Number(form.inseamCm) : undefined,
       thighCm: form.thighCm ? Number(form.thighCm) : undefined,
+      footCm: form.footCm ? Number(form.footCm) : undefined,
       notes: form.notes || undefined
     }
   }),
@@ -239,7 +243,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         type="number"
         step="0.1"
         min="1"
-        placeholder="Entrepierna (cm)"
+        placeholder="Tiro (cm)"
       />
       <UInput
         v-model="form.thighCm"
@@ -247,6 +251,13 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         step="0.1"
         min="1"
         placeholder="Muslo (cm)"
+      />
+      <UInput
+        v-model="form.footCm"
+        type="number"
+        step="0.1"
+        min="1"
+        placeholder="Pie (cm)"
       />
       <UInput
         v-model="form.notes"
@@ -314,7 +325,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
               {{ item.weightKg }} kg · {{ new Date(item.recordedAt).toLocaleDateString() }}
             </p>
             <p class="text-sm text-muted">
-              Altura: {{ item.heightCm ?? '—' }} cm · Pecho: {{ item.chestCm ?? '—' }} cm · Cintura: {{ item.waistCm ?? '—' }} cm
+              Altura: {{ item.heightCm ?? '—' }} cm · Pecho: {{ item.chestCm ?? '—' }} cm · Cintura: {{ item.waistCm ?? '—' }} cm · Cadera: {{ item.hipsCm ?? '—' }} cm · Hombros: {{ item.shoulderWidthCm ?? '—' }} cm · Manga: {{ item.sleeveLengthCm ?? '—' }} cm · Cuello: {{ item.neckCm ?? '—' }} cm · Tiro: {{ item.inseamCm ?? '—' }} cm · Muslo: {{ item.thighCm ?? '—' }} cm · Pie: {{ item.footCm ?? '—' }} cm
             </p>
             <p
               v-if="item.notes"
