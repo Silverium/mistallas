@@ -19,6 +19,7 @@ type Purchase = {
   fitFeedback?: string | null
   notes?: string | null
   price?: number | null
+  photoSlots?: number[]
 }
 
 type MeasurementFieldKey = typeof measurementSpecs[number]['key']
@@ -65,6 +66,8 @@ const form = reactive({
 const selectedComparison = ref<ComparisonResult | null>(null)
 const selectedPurchase = ref<Purchase | null>(null)
 const selectedPhotoPurchaseId = ref<number | null>(null)
+const selectedPreviewPurchase = ref<Purchase | null>(null)
+const selectedPreviewSlot = ref<number | null>(null)
 const photoInput = ref<HTMLInputElement | null>(null)
 const historyFilter = useSyncedStringQueryParam('filter')
 const editingPurchaseId = ref<number | null>(null)
@@ -222,6 +225,40 @@ const triggerPhotoPicker = () => {
   photoInput.value?.click()
 }
 
+const buildPhotoUrl = (purchaseId: number, slot: number) => `/api/purchases/${purchaseId}/photos/${slot}`
+
+const openPreview = (purchase: Purchase, slot: number) => {
+  selectedPreviewPurchase.value = purchase
+  selectedPreviewSlot.value = slot
+}
+
+const closePreview = () => {
+  selectedPreviewPurchase.value = null
+  selectedPreviewSlot.value = null
+}
+
+const previewSlots = computed(() => selectedPreviewPurchase.value?.photoSlots ?? [])
+
+const previewImageSrc = computed(() => {
+  const purchase = selectedPreviewPurchase.value
+  const slot = selectedPreviewSlot.value
+
+  if (!purchase || slot == null) {
+    return null
+  }
+
+  return buildPhotoUrl(purchase.id, slot)
+})
+
+const isPreviewOpen = computed({
+  get: () => Boolean(selectedPreviewPurchase.value && selectedPreviewSlot.value != null),
+  set: (isOpen: boolean) => {
+    if (!isOpen) {
+      closePreview()
+    }
+  }
+})
+
 const uploadPhotoFile = async (purchaseId: number, file: File) => {
   if (!purchaseId) {
     toast.add({ title: 'Selecciona una compra primero', color: 'warning' })
@@ -240,6 +277,7 @@ const uploadPhotoFile = async (purchaseId: number, file: File) => {
       }
     })
 
+    await queryCache.invalidateQueries(purchasesQuery)
     toast.add({ title: 'Foto subida' })
     await refreshPhotos()
   }
@@ -267,6 +305,17 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
     await $fetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
       method: 'DELETE'
     })
+    await queryCache.invalidateQueries(purchasesQuery)
+
+    if (selectedPreviewPurchase.value?.id === purchaseId && selectedPreviewSlot.value === slot) {
+      const nextSlot = (selectedPreviewPurchase.value.photoSlots ?? []).filter(currentSlot => currentSlot !== slot)[0]
+      selectedPreviewSlot.value = nextSlot ?? null
+
+      if (!nextSlot) {
+        closePreview()
+      }
+    }
+
     toast.add({ title: 'Foto eliminada' })
     await refreshPhotos()
   }
@@ -518,14 +567,40 @@ const diffRows = computed<RowDiff[]>(() => {
           :key="purchase.id"
           class="py-3 space-y-3"
         >
-          <div>
-            <p class="font-medium">
+          <div data-testid="purchase-info">
+            <p
+              data-testid="purchase-summary"
+              class="font-medium"
+            >
               {{ purchase.brand }} · {{ purchase.productType }} · Talla {{ purchase.sizeLabel }}
             </p>
-            <p class="text-sm text-muted">
+            <p
+              data-testid="purchase-details"
+              class="text-sm text-muted"
+            >
               {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template v-if="purchase.price != null">
                 · {{ purchase.price.toFixed(2) }} €
               </template>
+              <span
+                v-if="purchase.photoSlots?.length"
+                class="ml-2 inline-flex items-center gap-1 align-middle"
+              >
+                <button
+                  v-for="slot in purchase.photoSlots"
+                  :key="`preview-${purchase.id}-${slot}`"
+                  type="button"
+                  class="rounded-md ring-1 ring-gray-200 dark:ring-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  :aria-label="`Abrir foto ${slot} de ${purchase.brand}`"
+                  @click="openPreview(purchase, slot)"
+                >
+                  <img
+                    :src="buildPhotoUrl(purchase.id, slot)"
+                    :alt="`Foto ${slot} de ${purchase.brand}`"
+                    class="size-8 rounded-md object-cover"
+                    loading="lazy"
+                  >
+                </button>
+              </span>
             </p>
             <p
               v-if="purchase.notes || purchase.fitFeedback"
@@ -721,6 +796,61 @@ const diffRows = computed<RowDiff[]>(() => {
             >
               Cerrar
             </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="isPreviewOpen"
+      fullscreen
+      :dismissible="true"
+      :ui="{
+        content: 'h-screen w-screen max-w-none p-0 sm:p-0'
+      }"
+    >
+      <template #content>
+        <div class="relative flex h-screen w-screen flex-col bg-black/95 text-white">
+          <div class="absolute right-3 top-3 z-10">
+            <UButton
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-x"
+              @click="closePreview"
+            >
+              Cerrar
+            </UButton>
+          </div>
+
+          <div class="flex min-h-0 flex-1 items-center justify-center p-4 sm:p-8">
+            <img
+              v-if="previewImageSrc"
+              :src="previewImageSrc"
+              :alt="selectedPreviewPurchase ? `Vista ampliada de ${selectedPreviewPurchase.brand}` : 'Vista ampliada'"
+              class="max-h-full max-w-full object-contain"
+            >
+          </div>
+
+          <div
+            v-if="selectedPreviewPurchase && previewSlots.length > 1"
+            class="flex items-center gap-2 overflow-x-auto border-t border-white/10 p-3"
+          >
+            <button
+              v-for="slot in previewSlots"
+              :key="`modal-preview-${selectedPreviewPurchase.id}-${slot}`"
+              type="button"
+              class="rounded-md transition ring-2"
+              :class="selectedPreviewSlot === slot ? 'ring-primary' : 'ring-transparent hover:ring-white/40'"
+              :aria-label="`Ver foto ${slot}`"
+              @click="selectedPreviewSlot = slot"
+            >
+              <img
+                :src="buildPhotoUrl(selectedPreviewPurchase.id, slot)"
+                :alt="`Miniatura de foto ${slot}`"
+                class="size-16 rounded-md object-cover"
+                loading="lazy"
+              >
+            </button>
           </div>
         </div>
       </template>
