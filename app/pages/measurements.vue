@@ -136,15 +136,16 @@ const { mutate: uploadMeasurements, isLoading: uploading } = useMutation({
     toast.add({ title: `Se subieron ${result.uploaded} medidas.` })
   },
   onError(err) {
-    if (err instanceof Error) {
-      toast.add({ title: err.message, color: 'error' })
-      return
-    }
     if (isNuxtZodError(err)) {
-      const title = err.data?.data.issues.map(issue => issue.message).join('\n')
+      const issues = (err.data?.data as { issues?: Array<{ message: string }> } | undefined)?.issues
+      const title = issues?.map(issue => issue.message).join('\n')
       if (title) {
         toast.add({ title, color: 'error' })
       }
+      return
+    }
+    if (err instanceof Error) {
+      toast.add({ title: err.message, color: 'error' })
       return
     }
     toast.add({ title: 'No se pudo subir el lote de medidas.', color: 'error' })
@@ -168,7 +169,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
           v-if="!isMeasurementFormVisible"
           type="button"
           icon="i-lucide-plus"
-          @click="isMeasurementFormVisible = true"
+          @click="() => { isMeasurementFormVisible = true }"
         >
           Añadir medida
         </UButton>

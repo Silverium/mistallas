@@ -1,0 +1,1 @@
+ALTER TABLE `purchase_measurement_snapshots` ADD `foot_cm_x10` integer;

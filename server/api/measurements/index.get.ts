@@ -21,6 +21,7 @@ export default eventHandler(async (event) => {
       sleeveLengthCm: fromX10(row.sleeveLengthCm),
       neckCm: fromX10(row.neckCm),
       inseamCm: fromX10(row.inseamCm),
-      thighCm: fromX10(row.thighCm)
+      thighCm: fromX10(row.thighCm),
+      footCm: fromX10(row.footCm)
     }))
 })

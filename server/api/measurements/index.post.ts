@@ -35,6 +35,7 @@ export default eventHandler(async (event) => {
     neckCm: input.neckCm ? toX10(input.neckCm) : null,
     inseamCm: input.inseamCm ? toX10(input.inseamCm) : null,
     thighCm: input.thighCm ? toX10(input.thighCm) : null,
+    footCm: input.footCm ? toX10(input.footCm) : null,
     source: input.source ?? 'manual',
     notes: input.notes ?? null
   }).returning().get()

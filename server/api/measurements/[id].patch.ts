@@ -38,6 +38,7 @@ export default eventHandler(async (event) => {
     ...(input.neckCm !== undefined ? { neckCm: toX10(input.neckCm) } : {}),
     ...(input.inseamCm !== undefined ? { inseamCm: toX10(input.inseamCm) } : {}),
     ...(input.thighCm !== undefined ? { thighCm: toX10(input.thighCm) } : {}),
+    ...(input.footCm !== undefined ? { footCm: toX10(input.footCm) } : {}),
     ...(input.source !== undefined ? { source: input.source } : {}),
     ...(input.notes !== undefined ? { notes: input.notes } : {})
   }

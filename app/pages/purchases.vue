@@ -30,6 +30,7 @@ type ComparisonResult = {
     neckCm?: number | null
     inseamCm?: number | null
     thighCm?: number | null
+    footCm?: number | null
   }
   currentMeasurement?: {
     weightKg?: number | null
@@ -42,6 +43,7 @@ type ComparisonResult = {
     neckCm?: number | null
     inseamCm?: number | null
     thighCm?: number | null
+    footCm?: number | null
   }
   highlights?: {
     weight?: string | null
@@ -297,7 +299,8 @@ const diffRows = computed<RowDiff[]>(() => {
     { key: 'sleeveLengthCm', label: 'Largo de manga', unit: 'cm' },
     { key: 'neckCm', label: 'Cuello', unit: 'cm' },
     { key: 'inseamCm', label: 'Entrepierna', unit: 'cm' },
-    { key: 'thighCm', label: 'Muslo', unit: 'cm' }
+    { key: 'thighCm', label: 'Muslo', unit: 'cm' },
+    { key: 'footCm', label: 'Pie', unit: 'cm' }
   ] as const
 
   return specs.flatMap((spec) => {

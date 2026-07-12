@@ -67,6 +67,12 @@ export default eventHandler(async (event) => {
   const chest = metric(fromX10(snapshot.chestCm), fromX10(current.chestCm))
   const waist = metric(fromX10(snapshot.waistCm), fromX10(current.waistCm))
   const hips = metric(fromX10(snapshot.hipsCm), fromX10(current.hipsCm))
+  const shoulderWidth = metric(fromX10(snapshot.shoulderWidthCm), fromX10(current.shoulderWidthCm))
+  const sleeveLength = metric(fromX10(snapshot.sleeveLengthCm), fromX10(current.sleeveLengthCm))
+  const neck = metric(fromX10(snapshot.neckCm), fromX10(current.neckCm))
+  const inseam = metric(fromX10(snapshot.inseamCm), fromX10(current.inseamCm))
+  const thigh = metric(fromX10(snapshot.thighCm), fromX10(current.thighCm))
+  const foot = metric(fromX10(snapshot.footCm), fromX10(current.footCm))
 
   const weightHighlight = weight.then !== null && weight.now !== null
     ? `Tenías ${weight.then}kg la última vez que compraste esto, y ahora tienes ${weight.now}kg (${weight.delta! >= 0 ? '+' : ''}${weight.delta}kg).`
@@ -85,7 +91,8 @@ export default eventHandler(async (event) => {
       sleeveLengthCm: fromX10(snapshot.sleeveLengthCm),
       neckCm: fromX10(snapshot.neckCm),
       inseamCm: fromX10(snapshot.inseamCm),
-      thighCm: fromX10(snapshot.thighCm)
+      thighCm: fromX10(snapshot.thighCm),
+      footCm: fromX10(snapshot.footCm)
     },
     currentMeasurement: {
       recordedAt: current.recordedAt,
@@ -98,14 +105,21 @@ export default eventHandler(async (event) => {
       sleeveLengthCm: fromX10(current.sleeveLengthCm),
       neckCm: fromX10(current.neckCm),
       inseamCm: fromX10(current.inseamCm),
-      thighCm: fromX10(current.thighCm)
+      thighCm: fromX10(current.thighCm),
+      footCm: fromX10(current.footCm)
     },
     comparison: {
       weightKg: weight,
       heightCm: height,
       chestCm: chest,
       waistCm: waist,
-      hipsCm: hips
+      hipsCm: hips,
+      shoulderWidthCm: shoulderWidth,
+      sleeveLengthCm: sleeveLength,
+      neckCm: neck,
+      inseamCm: inseam,
+      thighCm: thigh,
+      footCm: foot
     },
     highlights: {
       weight: weightHighlight

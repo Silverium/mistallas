@@ -15,6 +15,7 @@ const measurementSchema = z.object({
   neckCm: z.coerce.number().positive().optional(),
   inseamCm: z.coerce.number().positive().optional(),
   thighCm: z.coerce.number().positive().optional(),
+  footCm: z.coerce.number().positive().optional(),
   source: z.string().min(1).max(30).optional(),
   notes: z.string().max(500).optional()
 })
@@ -39,6 +40,7 @@ export default eventHandler(async (event) => {
       neckCm: input.neckCm !== undefined ? toX10(input.neckCm) : null,
       inseamCm: input.inseamCm !== undefined ? toX10(input.inseamCm) : null,
       thighCm: input.thighCm !== undefined ? toX10(input.thighCm) : null,
+      footCm: input.footCm !== undefined ? toX10(input.footCm) : null,
       source: input.source ?? 'upload',
       notes: input.notes ?? null
     }).returning().get()

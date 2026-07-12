@@ -70,7 +70,8 @@ export default eventHandler(async (event) => {
     sleeveLengthCm: measurement.sleeveLengthCm,
     neckCm: measurement.neckCm,
     inseamCm: measurement.inseamCm,
-    thighCm: measurement.thighCm
+    thighCm: measurement.thighCm,
+    footCm: measurement.footCm
   }).returning().get()
 
   return {

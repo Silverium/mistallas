@@ -68,5 +68,6 @@ export const purchaseMeasurementSnapshots = sqliteTable('purchase_measurement_sn
   sleeveLengthCm: integer('sleeve_length_cm_x10'),
   neckCm: integer('neck_cm_x10'),
   inseamCm: integer('inseam_cm_x10'),
-  thighCm: integer('thigh_cm_x10')
+  thighCm: integer('thigh_cm_x10'),
+  footCm: integer('foot_cm_x10')
 })

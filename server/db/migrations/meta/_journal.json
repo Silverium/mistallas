@@ -43,6 +43,13 @@
       "when": 1783363583553,
       "tag": "0005_colossal_harpoon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783850451509,
+      "tag": "0006_wakeful_stark_industries",
+      "breakpoints": true
     }
   ]
 }
