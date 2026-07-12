@@ -456,7 +456,7 @@ const diffRows = computed<RowDiff[]>(() => {
       id="purchase-photo-input"
       ref="photoInput"
       type="file"
-      accept="image/jpeg,image/png,image/webp"
+      accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
       class="hidden"
       @change="onPhotoInputChange"
     >

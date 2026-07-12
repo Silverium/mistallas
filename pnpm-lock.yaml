@@ -49,6 +49,9 @@ importers:
       h3-zod:
         specifier: ^0.5.3
         version: 0.5.3(h3@1.15.4)(zod@3.25.76)
+      heic-to:
+        specifier: ^1.5.2
+        version: 1.5.2
       nuxt:
         specifier: ^4.2.1
         version: 4.2.1(@electric-sql/pglite@0.3.14)(@libsql/client@0.17.4)(@parcel/watcher@2.5.1)(@types/node@25.0.3)(@vue/compiler-sfc@3.5.24)(better-sqlite3@11.10.0)(db0@0.3.4(@electric-sql/pglite@0.3.14)(@libsql/client@0.17.4)(better-sqlite3@11.10.0)(drizzle-orm@0.44.2(@cloudflare/workers-types@4.20260628.1)(@electric-sql/pglite@0.3.14)(@libsql/client@0.17.4)(better-sqlite3@11.10.0)(postgres@3.4.7)))(drizzle-orm@0.44.2(@cloudflare/workers-types@4.20260628.1)(@electric-sql/pglite@0.3.14)(@libsql/client@0.17.4)(better-sqlite3@11.10.0)(postgres@3.4.7))(eslint@9.39.1(jiti@2.6.1))(ioredis@5.8.2)(lightningcss@1.30.2)(magicast@0.5.1)(optionator@0.9.4)(rolldown@1.0.0-beta.55)(rollup@4.52.5)(terser@5.44.1)(typescript@5.9.3)(vite@7.2.2(@types/node@25.0.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(yaml@2.8.1))(yaml@2.8.1)
@@ -3900,6 +3903,9 @@ packages:
   hasown@2.0.2:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
+
+  heic-to@1.5.2:
+    resolution: {integrity: sha512-8Fns+lZHAWmz5U5IUxDeXKwIf3foBoKNPLxxFY4B0MkLjNuomEIHCoDbDE+x/llFK3NCEO1cu4+n3iUKY+Svmw==}
 
   hookable@5.5.3:
     resolution: {integrity: sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==}
@@ -10253,6 +10259,8 @@ snapshots:
   hasown@2.0.2:
     dependencies:
       function-bind: 1.1.2
+
+  heic-to@1.5.2: {}
 
   hookable@5.5.3: {}
 

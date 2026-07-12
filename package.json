@@ -29,6 +29,7 @@
     "drizzle-kit": "^0.31.1",
     "drizzle-orm": "0.44.2",
     "h3-zod": "^0.5.3",
+    "heic-to": "^1.5.2",
     "nuxt": "^4.2.1",
     "nuxt-auth-utils": "^0.5.20",
     "pinia": "^3.0.3",

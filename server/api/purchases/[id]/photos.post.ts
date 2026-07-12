@@ -2,13 +2,30 @@ import { eq, and } from 'drizzle-orm'
 import { useValidatedParams, z } from 'h3-zod'
 import { tables, useDB } from '../../../utils/db'
 
+const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const
+
 const photoUploadSchema = z.object({
   fileBase64: z.string().min(1),
-  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  mimeType: z.enum(allowedMimeTypes),
   slot: z.coerce.number().int().min(1).max(3).optional(),
   width: z.coerce.number().int().positive().optional(),
   height: z.coerce.number().int().positive().optional()
 })
+
+function inferMimeTypeFromFilename(filename?: string): string {
+  if (!filename) {
+    return ''
+  }
+
+  const lowered = filename.toLowerCase()
+  if (lowered.endsWith('.heic')) return 'image/heic'
+  if (lowered.endsWith('.heif')) return 'image/heif'
+  if (lowered.endsWith('.jpg') || lowered.endsWith('.jpeg')) return 'image/jpeg'
+  if (lowered.endsWith('.png')) return 'image/png'
+  if (lowered.endsWith('.webp')) return 'image/webp'
+
+  return ''
+}
 
 function decodeBase64ToBytes(value: string) {
   const base64 = value.includes(',') ? value.split(',').pop() || '' : value
@@ -84,7 +101,7 @@ export default eventHandler(async (event) => {
     }
 
     const file = formData.find(item => item.name === 'file')
-    if (!file || !file.type || !file.data) {
+    if (!file || !file.data) {
       throw createError({ statusCode: 400, message: 'Invalid file' })
     }
 
@@ -115,7 +132,7 @@ export default eventHandler(async (event) => {
       height = parsedHeight.data
     }
 
-    mimeType = file.type
+    mimeType = file.type || inferMimeTypeFromFilename(file.filename)
     fileBytes = file.data
   }
 
@@ -124,9 +141,8 @@ export default eventHandler(async (event) => {
   }
 
   // Validate mime type and size
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-  if (!allowedTypes.includes(mimeType)) {
-    throw createError({ statusCode: 400, message: 'Invalid file type. Supported types: JPEG, PNG, WebP' })
+  if (!allowedMimeTypes.includes(mimeType as typeof allowedMimeTypes[number])) {
+    throw createError({ statusCode: 400, message: 'Invalid file type. Supported types: JPEG, PNG, WebP, HEIC, HEIF' })
   }
 
   const MAX_SIZE = 1 * 1024 * 1024 // 1MB hard limit
@@ -184,7 +200,11 @@ export default eventHandler(async (event) => {
     ? 'png'
     : mimeType === 'image/jpeg'
       ? 'jpg'
-      : 'webp'
+      : mimeType === 'image/heic'
+        ? 'heic'
+        : mimeType === 'image/heif'
+          ? 'heif'
+          : 'webp'
   const storageKey = `users/${user.id}/purchases/${purchase.id}/${slot}.${extension}`
 
   // 4. Upload to R2

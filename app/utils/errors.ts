@@ -28,7 +28,11 @@ export function getApiErrorMessage(err: unknown): string | undefined {
 }
 
 const serverErrorSpanishMap: Record<string, string> = {
-  'Maximum of 3 photos allowed per purchase': 'Máximo de 3 fotos por compra.'
+  'Maximum of 3 photos allowed per purchase': 'Máximo de 3 fotos por compra.',
+  'File size exceeds limit (1MB)': 'La imagen supera el límite de 1 MB.',
+  'Invalid file type. Supported types: JPEG, PNG, WebP, HEIC, HEIF': 'Formato de imagen no compatible. Usa JPG, PNG, WebP, HEIC o HEIF.',
+  'No file provided': 'No se encontró ningún archivo para subir.',
+  'Invalid file': 'El archivo seleccionado no es válido.'
 }
 
 export function getSpanishApiErrorMessage(err: unknown): string | undefined {
