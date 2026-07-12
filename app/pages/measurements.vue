@@ -5,21 +5,12 @@ definePageMeta({
   middleware: 'auth'
 })
 
-type Measurement = {
+type MeasurementFieldKey = typeof measurementSpecs[number]['key']
+type Measurement = { [K in MeasurementFieldKey]: number | null } & {
   id: number
   recordedAt: string | Date
   weightKg: number
-  heightCm?: number | null
-  chestCm?: number | null
-  waistCm?: number | null
-  hipsCm?: number | null
-  shoulderWidthCm?: number | null
-  sleeveLengthCm?: number | null
-  neckCm?: number | null
-  inseamCm?: number | null
-  thighCm?: number | null
   notes?: string | null
-  footCm?: number | null
 }
 
 const toast = useToast()
@@ -326,7 +317,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
               {{ item.weightKg }} kg · {{ new Date(item.recordedAt).toLocaleDateString() }}
             </p>
             <p class="text-sm text-muted">
-              Altura: {{ item.heightCm ?? '—' }} cm · Pecho: {{ item.chestCm ?? '—' }} cm · Cintura: {{ item.waistCm ?? '—' }} cm · Cadera: {{ item.hipsCm ?? '—' }} cm · Hombros: {{ item.shoulderWidthCm ?? '—' }} cm · Manga: {{ item.sleeveLengthCm ?? '—' }} cm · Cuello: {{ item.neckCm ?? '—' }} cm · Tiro: {{ item.inseamCm ?? '—' }} cm · Muslo: {{ item.thighCm ?? '—' }} cm · Pie: {{ item.footCm ?? '—' }} cm
+              {{ measurementSpecs.filter(s => s.key !== 'weightKg').map(s => `${s.label}: ${item[s.key as MeasurementFieldKey] ?? '—'} ${s.unit}`).join(' · ') }}
             </p>
             <p
               v-if="item.notes"

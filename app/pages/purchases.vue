@@ -18,39 +18,18 @@ type Purchase = {
   price?: number | null
 }
 
+type MeasurementFieldKey = typeof measurementSpecs[number]['key']
+type MeasurementSnapshot = Partial<Record<MeasurementFieldKey, number | null>>
+
 type ComparisonResult = {
-  snapshotAtPurchase?: {
-    weightKg?: number | null
-    heightCm?: number | null
-    chestCm?: number | null
-    waistCm?: number | null
-    hipsCm?: number | null
-    shoulderWidthCm?: number | null
-    sleeveLengthCm?: number | null
-    neckCm?: number | null
-    inseamCm?: number | null
-    thighCm?: number | null
-    footCm?: number | null
-  }
-  currentMeasurement?: {
-    weightKg?: number | null
-    heightCm?: number | null
-    chestCm?: number | null
-    waistCm?: number | null
-    hipsCm?: number | null
-    shoulderWidthCm?: number | null
-    sleeveLengthCm?: number | null
-    neckCm?: number | null
-    inseamCm?: number | null
-    thighCm?: number | null
-    footCm?: number | null
-  }
+  snapshotAtPurchase?: MeasurementSnapshot
+  currentMeasurement?: MeasurementSnapshot
   highlights?: {
     weight?: string | null
   }
   comparison?: {
     weightKg?: {
-      then: number | null
+      before: number | null
       now: number | null
       delta: number | null
     }
@@ -289,21 +268,7 @@ const diffRows = computed<RowDiff[]>(() => {
     return []
   }
 
-  const specs = [
-    { key: 'weightKg', label: 'Peso', unit: 'kg' },
-    { key: 'heightCm', label: 'Altura', unit: 'cm' },
-    { key: 'chestCm', label: 'Pecho', unit: 'cm' },
-    { key: 'waistCm', label: 'Cintura', unit: 'cm' },
-    { key: 'hipsCm', label: 'Cadera', unit: 'cm' },
-    { key: 'shoulderWidthCm', label: 'Ancho de hombros', unit: 'cm' },
-    { key: 'sleeveLengthCm', label: 'Largo de manga', unit: 'cm' },
-    { key: 'neckCm', label: 'Cuello', unit: 'cm' },
-    { key: 'inseamCm', label: 'Entrepierna', unit: 'cm' },
-    { key: 'thighCm', label: 'Muslo', unit: 'cm' },
-    { key: 'footCm', label: 'Pie', unit: 'cm' }
-  ] as const
-
-  return specs.flatMap((spec) => {
+  return measurementSpecs.flatMap((spec) => {
     const before = snapshot[spec.key]
     const now = current[spec.key]
 

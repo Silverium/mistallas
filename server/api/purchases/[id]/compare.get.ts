@@ -1,26 +1,32 @@
 import { and, eq } from 'drizzle-orm'
 import { useValidatedParams, zh } from 'h3-zod'
+import { decodeMeasurement, fromScaled, measurementFields } from '../../../utils/measurements'
+import type { MeasurementKey, MeasurementSource } from '../../../utils/measurements'
 
 type Metric = {
-  then: number | null
+  before: number | null
   now: number | null
   delta: number | null
 }
 
-const fromX100 = (value: number | null) => value === null ? null : value / 100
-const fromX10 = (value: number | null) => value === null ? null : value / 10
-
-const metric = (thenValue: number | null, nowValue: number | null): Metric => {
+const buildMetric = (thenValue: number | null, nowValue: number | null): Metric => {
   if (thenValue === null || nowValue === null) {
-    return { then: thenValue, now: nowValue, delta: null }
+    return { before: thenValue, now: nowValue, delta: null }
   }
-
   return {
-    then: thenValue,
+    before: thenValue,
     now: nowValue,
     delta: Number((nowValue - thenValue).toFixed(2))
   }
 }
+
+const buildComparison = (snapshotSrc: MeasurementSource, currentSrc: MeasurementSource) =>
+  Object.fromEntries(
+    measurementFields.map(({ key, scale }) => [
+      key,
+      buildMetric(fromScaled(snapshotSrc[key], scale), fromScaled(currentSrc[key], scale))
+    ])
+  ) as Record<MeasurementKey, Metric>
 
 export default eventHandler(async (event) => {
   const { id } = await useValidatedParams(event, {
@@ -62,65 +68,23 @@ export default eventHandler(async (event) => {
     })
   }
 
-  const weight = metric(fromX100(snapshot.weightKg), fromX100(current.weightKg))
-  const height = metric(fromX10(snapshot.heightCm), fromX10(current.heightCm))
-  const chest = metric(fromX10(snapshot.chestCm), fromX10(current.chestCm))
-  const waist = metric(fromX10(snapshot.waistCm), fromX10(current.waistCm))
-  const hips = metric(fromX10(snapshot.hipsCm), fromX10(current.hipsCm))
-  const shoulderWidth = metric(fromX10(snapshot.shoulderWidthCm), fromX10(current.shoulderWidthCm))
-  const sleeveLength = metric(fromX10(snapshot.sleeveLengthCm), fromX10(current.sleeveLengthCm))
-  const neck = metric(fromX10(snapshot.neckCm), fromX10(current.neckCm))
-  const inseam = metric(fromX10(snapshot.inseamCm), fromX10(current.inseamCm))
-  const thigh = metric(fromX10(snapshot.thighCm), fromX10(current.thighCm))
-  const foot = metric(fromX10(snapshot.footCm), fromX10(current.footCm))
+  const comparison = buildComparison(snapshot, current)
 
-  const weightHighlight = weight.then !== null && weight.now !== null
-    ? `Tenías ${weight.then}kg la última vez que compraste esto, y ahora tienes ${weight.now}kg (${weight.delta! >= 0 ? '+' : ''}${weight.delta}kg).`
+  const weightHighlight = comparison.weightKg.before !== null && comparison.weightKg.now !== null
+    ? `Tenías ${comparison.weightKg.before}kg la última vez que compraste esto, y ahora tienes ${comparison.weightKg.now}kg (${comparison.weightKg.delta! >= 0 ? '+' : ''}${comparison.weightKg.delta}kg).`
     : null
 
   return {
     purchase,
     snapshotAtPurchase: {
       measuredAt: snapshot.measuredAt,
-      weightKg: fromX100(snapshot.weightKg),
-      heightCm: fromX10(snapshot.heightCm),
-      chestCm: fromX10(snapshot.chestCm),
-      waistCm: fromX10(snapshot.waistCm),
-      hipsCm: fromX10(snapshot.hipsCm),
-      shoulderWidthCm: fromX10(snapshot.shoulderWidthCm),
-      sleeveLengthCm: fromX10(snapshot.sleeveLengthCm),
-      neckCm: fromX10(snapshot.neckCm),
-      inseamCm: fromX10(snapshot.inseamCm),
-      thighCm: fromX10(snapshot.thighCm),
-      footCm: fromX10(snapshot.footCm)
+      ...decodeMeasurement(snapshot)
     },
     currentMeasurement: {
       recordedAt: current.recordedAt,
-      weightKg: fromX100(current.weightKg),
-      heightCm: fromX10(current.heightCm),
-      chestCm: fromX10(current.chestCm),
-      waistCm: fromX10(current.waistCm),
-      hipsCm: fromX10(current.hipsCm),
-      shoulderWidthCm: fromX10(current.shoulderWidthCm),
-      sleeveLengthCm: fromX10(current.sleeveLengthCm),
-      neckCm: fromX10(current.neckCm),
-      inseamCm: fromX10(current.inseamCm),
-      thighCm: fromX10(current.thighCm),
-      footCm: fromX10(current.footCm)
+      ...decodeMeasurement(current)
     },
-    comparison: {
-      weightKg: weight,
-      heightCm: height,
-      chestCm: chest,
-      waistCm: waist,
-      hipsCm: hips,
-      shoulderWidthCm: shoulderWidth,
-      sleeveLengthCm: sleeveLength,
-      neckCm: neck,
-      inseamCm: inseam,
-      thighCm: thigh,
-      footCm: foot
-    },
+    comparison,
     highlights: {
       weight: weightHighlight
     }
