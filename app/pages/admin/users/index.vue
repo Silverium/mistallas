@@ -1,69 +1,60 @@
 <template>
-  <div class="bg-gray-50">
+  <div class="bg-default">
     <div class="max-w-7xl mx-auto px-4 py-8">
       <div class="flex justify-between items-center mb-8">
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">
+          <h1 class="text-3xl font-bold">
             Usuarios
           </h1>
-          <p class="text-gray-600 mt-2">
+          <p class="text-muted mt-2">
             Gestiona los planes y roles de los usuarios
           </p>
         </div>
-        <NuxtLink
+        <UButton
           to="/"
-          class="px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          variant="outline"
+          color="neutral"
         >
           Volver al inicio
-        </NuxtLink>
+        </UButton>
       </div>
 
       <!-- Filters -->
-      <div class="bg-white p-4 rounded-lg shadow mb-6 flex gap-4">
-        <div class="flex-1">
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Buscar por ID de usuario..."
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <UCard class="mb-6">
+        <div class="flex gap-4">
+          <div class="flex-1">
+            <UInput
+              v-model="searchQuery"
+              placeholder="Buscar por ID de usuario..."
+              color="primary"
+            />
+          </div>
+          <USelect
+            v-model="selectedTier"
+            :items="tierOptions"
+            color="primary"
+            value-key="value"
+          />
+          <UButton
+            color="primary"
+            @click="fetchUsers"
           >
+            Buscar
+          </UButton>
         </div>
-        <select
-          v-model="selectedTier"
-          class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">
-            Todos los planes
-          </option>
-          <option value="free">
-            Gratis
-          </option>
-          <option value="premium">
-            Premium
-          </option>
-          <option value="enterprise">
-            Empresarial
-          </option>
-        </select>
-        <button
-          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          @click="fetchUsers"
-        >
-          Buscar
-        </button>
-      </div>
+      </UCard>
 
       <!-- Users Table -->
-      <div class="bg-white rounded-lg shadow overflow-hidden">
+      <div class="bg-default rounded-lg shadow overflow-hidden ring ring-default">
         <div
           v-if="loading"
-          class="p-8 text-center text-gray-500"
+          class="p-8 text-center text-muted"
         >
           Cargando usuarios...
         </div>
         <div
           v-else-if="users.length === 0"
-          class="p-8 text-center text-gray-500"
+          class="p-8 text-center text-muted"
         >
           No se encontraron usuarios
         </div>
@@ -79,82 +70,79 @@
               class="p-4 space-y-3"
             >
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
                   ID de usuario
                 </p>
-                <code class="text-xs bg-gray-100 px-2 py-1 rounded break-all">{{ user.id }}</code>
+                <code class="text-xs bg-elevated px-2 py-1 rounded break-all">{{ user.id }}</code>
               </div>
 
               <div class="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
                     Plan
                   </p>
-                  <span
-                    :class="[
-                      'inline-flex px-3 py-1 rounded-full text-xs font-medium',
-                      user.tier === 'free' && 'bg-gray-100 text-gray-800',
-                      user.tier === 'premium' && 'bg-blue-100 text-blue-800',
-                      user.tier === 'enterprise' && 'bg-purple-100 text-purple-800'
-                    ]"
+                  <UBadge
+                    :color="getTierBadgeColor(user.tier)"
+                    variant="soft"
                   >
                     {{ user.tier === 'free' ? 'Gratis' : user.tier === 'premium' ? 'Premium' : 'Empresarial' }}
-                  </span>
+                  </UBadge>
                 </div>
                 <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
                     Rol
                   </p>
-                  <span
-                    :class="[
-                      'inline-flex px-3 py-1 rounded-full text-xs font-medium',
-                      user.role === 'user' && 'bg-gray-100 text-gray-800',
-                      user.role === 'admin' && 'bg-red-100 text-red-800'
-                    ]"
+                  <UBadge
+                    :color="getRoleBadgeColor(user.role)"
+                    variant="soft"
                   >
                     {{ user.role === 'user' ? 'Usuario' : 'Administrador' }}
-                  </span>
+                  </UBadge>
                 </div>
                 <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
                     Compras
                   </p>
-                  <p class="text-gray-900">
+                  <p>
                     {{ user.purchaseCount }}
                   </p>
                 </div>
                 <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
                     Proveedor
                   </p>
-                  <p class="text-gray-700 capitalize">
+                  <p class="capitalize">
                     {{ user.loginProvider }}
                   </p>
                 </div>
               </div>
 
               <div>
-                <p class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+                <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
                   Alta
                 </p>
-                <p class="text-sm text-gray-700">
+                <p class="text-sm">
                   {{ new Date(user.createdAt).toLocaleDateString() }}
                 </p>
               </div>
 
               <div class="flex flex-wrap gap-3 pt-1">
-                <NuxtLink
+                <UButton
                   :to="`/admin/users/${user.id}`"
-                  class="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                  variant="link"
+                  color="primary"
+                  size="sm"
                 >
                   Editar
-                </NuxtLink>
-                <button
-                  class="text-red-600 hover:text-red-900 text-sm font-medium"
+                </UButton>
+                <UButton
+                  variant="link"
+                  color="error"
+                  size="sm"
                   @click="deleteUser(user.id)"
                 >
                   Eliminar
-                </button>
+                </UButton>
               </div>
             </article>
           </div>
@@ -162,85 +150,82 @@
           <!-- Desktop: tabla -->
           <div class="hidden md:block overflow-x-auto">
             <table class="min-w-full">
-              <thead class="bg-gray-100 border-b border-gray-200">
+              <thead class="bg-elevated border-b border-default">
                 <tr>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     ID de usuario
                   </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     Plan
                   </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     Rol
                   </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     Compras
                   </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     Proveedor
                   </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     Alta
                   </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th class="px-6 py-3 text-left text-sm font-semibold">
                     Acciones
                   </th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-200">
+              <tbody class="divide-y divide-default">
                 <tr
                   v-for="user in users"
                   :key="`desktop-${user.id}`"
-                  class="hover:bg-gray-50"
+                  class="hover:bg-elevated/50"
                 >
-                  <td class="px-6 py-4 text-sm text-gray-900">
-                    <code class="text-xs bg-gray-100 px-2 py-1 rounded">{{ user.id }}</code>
+                  <td class="px-6 py-4 text-sm">
+                    <code class="text-xs bg-elevated px-2 py-1 rounded">{{ user.id }}</code>
                   </td>
                   <td class="px-6 py-4 text-sm">
-                    <span
-                      :class="[
-                        'px-3 py-1 rounded-full text-xs font-medium',
-                        user.tier === 'free' && 'bg-gray-100 text-gray-800',
-                        user.tier === 'premium' && 'bg-blue-100 text-blue-800',
-                        user.tier === 'enterprise' && 'bg-purple-100 text-purple-800'
-                      ]"
+                    <UBadge
+                      :color="getTierBadgeColor(user.tier)"
+                      variant="soft"
                     >
                       {{ user.tier === 'free' ? 'Gratis' : user.tier === 'premium' ? 'Premium' : 'Empresarial' }}
-                    </span>
+                    </UBadge>
                   </td>
                   <td class="px-6 py-4 text-sm">
-                    <span
-                      :class="[
-                        'px-3 py-1 rounded-full text-xs font-medium',
-                        user.role === 'user' && 'bg-gray-100 text-gray-800',
-                        user.role === 'admin' && 'bg-red-100 text-red-800'
-                      ]"
+                    <UBadge
+                      :color="getRoleBadgeColor(user.role)"
+                      variant="soft"
                     >
                       {{ user.role === 'user' ? 'Usuario' : 'Administrador' }}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900">
-                    {{ user.purchaseCount }}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-500">
-                    {{ user.loginProvider }}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-500">
-                    {{ new Date(user.createdAt).toLocaleDateString() }}
+                    </UBadge>
                   </td>
                   <td class="px-6 py-4 text-sm">
-                    <NuxtLink
+                    {{ user.purchaseCount }}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-muted">
+                    {{ user.loginProvider }}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-muted">
+                    {{ new Date(user.createdAt).toLocaleDateString() }}
+                  </td>
+                  <td class="px-6 py-4 text-sm flex items-center gap-2">
+                    <UButton
                       :to="`/admin/users/${user.id}`"
-                      class="text-blue-600 hover:text-blue-900 mr-4"
+                      variant="link"
+                      color="primary"
+                      size="sm"
                     >
                       Editar
-                    </NuxtLink>
-                    <button
-                      class="text-red-600 hover:text-red-900"
+                    </UButton>
+                    <UButton
+                      variant="link"
+                      color="error"
+                      size="sm"
                       @click="deleteUser(user.id)"
                     >
                       Eliminar
-                    </button>
+                    </UButton>
                   </td>
                 </tr>
               </tbody>
@@ -254,21 +239,23 @@
         v-if="pages > 1"
         class="flex justify-center gap-2 mt-6"
       >
-        <button
+        <UButton
           :disabled="currentPage === 1"
-          class="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-          @click="currentPage--"
+          color="neutral"
+          variant="outline"
+          @click="previousPage"
         >
           Anterior
-        </button>
-        <span class="px-4 py-2">Página {{ currentPage }} de {{ pages }}</span>
-        <button
+        </UButton>
+        <span class="px-4 py-2 text-muted">Página {{ currentPage }} de {{ pages }}</span>
+        <UButton
           :disabled="currentPage === pages"
-          class="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50"
-          @click="currentPage++"
+          color="neutral"
+          variant="outline"
+          @click="nextPage"
         >
           Siguiente
-        </button>
+        </UButton>
       </div>
     </div>
   </div>
@@ -300,6 +287,13 @@ interface AdminUsersResponse {
 const currentPage = ref(1)
 const searchQuery = ref('')
 const selectedTier = ref<'all' | 'free' | 'premium' | 'enterprise'>('all')
+
+const tierOptions = [
+  { label: 'Todos los planes', value: 'all' },
+  { label: 'Gratis', value: 'free' },
+  { label: 'Premium', value: 'premium' },
+  { label: 'Empresarial', value: 'enterprise' }
+]
 
 const usersQuery = computed(() => {
   const query = {
@@ -344,6 +338,30 @@ watch([searchQuery, selectedTier], () => {
 
 async function fetchUsers() {
   await refresh()
+}
+
+function previousPage() {
+  currentPage.value = Math.max(1, currentPage.value - 1)
+}
+
+function nextPage() {
+  currentPage.value = Math.min(pages.value, currentPage.value + 1)
+}
+
+function getTierBadgeColor(tier: AdminUser['tier']): 'neutral' | 'primary' | 'secondary' {
+  if (tier === 'premium') {
+    return 'primary'
+  }
+
+  if (tier === 'enterprise') {
+    return 'secondary'
+  }
+
+  return 'neutral'
+}
+
+function getRoleBadgeColor(role: AdminUser['role']): 'neutral' | 'error' {
+  return role === 'admin' ? 'error' : 'neutral'
 }
 
 async function deleteUser(userId: string) {

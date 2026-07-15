@@ -1,21 +1,22 @@
 <template>
-  <div class="bg-gray-50">
+  <div class="ring ring-default">
     <div class="max-w-4xl mx-auto px-4 py-8">
       <div class="flex items-center gap-4 mb-8">
-        <NuxtLink
+        <UButton
           to="/admin/users"
-          class="text-blue-600 hover:text-blue-900"
+          variant="link"
+          color="primary"
         >
           ← Volver a usuarios
-        </NuxtLink>
-        <h1 class="text-3xl font-bold text-gray-900">
+        </UButton>
+        <h1 class="text-3xl font-bold ">
           Editar usuario
         </h1>
       </div>
 
       <div
         v-if="loading"
-        class="text-center text-gray-500"
+        class="text-center "
       >
         Cargando usuario...
       </div>
@@ -24,150 +25,164 @@
         class="space-y-6"
       >
         <!-- User Info Card -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Información del usuario
-          </h2>
+        <UCard>
+          <template #header>
+            <h2 class="text-lg font-semibold">
+              Información del usuario
+            </h2>
+          </template>
+
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="text-sm text-gray-600">ID de usuario</label>
-              <p class="text-gray-900 font-mono">
+              <p class="text-xs text-muted">
+                ID de usuario
+              </p>
+              <p class="font-mono text-sm">
                 {{ user.id }}
               </p>
             </div>
             <div>
-              <label class="text-sm text-gray-600">Proveedor de acceso</label>
-              <p class="text-gray-900 capitalize">
+              <p class="text-xs text-muted">
+                Proveedor de acceso
+              </p>
+              <p class="capitalize text-sm">
                 {{ user.loginProvider }}
               </p>
             </div>
             <div>
-              <label class="text-sm text-gray-600">Alta</label>
-              <p class="text-gray-900">
+              <p class="text-xs text-muted">
+                Alta
+              </p>
+              <p class="text-sm">
                 {{ new Date(user.createdAt).toLocaleDateString() }}
               </p>
             </div>
             <div>
-              <label class="text-sm text-gray-600">Última actualización</label>
-              <p class="text-gray-900">
+              <p class="text-xs text-muted">
+                Última actualización
+              </p>
+              <p class="text-sm">
                 {{ new Date(user.updatedAt).toLocaleDateString() }}
               </p>
             </div>
           </div>
-        </div>
+        </UCard>
 
         <!-- Tier & Role Card -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Plan y rol
-          </h2>
+        <UCard>
+          <template #header>
+            <h2 class="text-lg font-semibold">
+              Plan y rol
+            </h2>
+          </template>
+
           <div class="grid grid-cols-2 gap-6">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Plan</label>
-              <select
+              <label class="block text-sm font-medium text-muted mb-2">Plan</label>
+              <USelect
                 v-model="editedTier"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="free">
-                  Gratis
-                </option>
-                <option value="premium">
-                  Premium
-                </option>
-                <option value="enterprise">
-                  Empresarial
-                </option>
-              </select>
+                :items="tierOptions"
+                value-key="value"
+                color="primary"
+                class="w-full"
+              />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Rol</label>
-              <select
+              <label class="block text-sm font-medium text-muted mb-2">Rol</label>
+              <USelect
                 v-model="editedRole"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="user">
-                  Usuario
-                </option>
-                <option value="admin">
-                  Administrador
-                </option>
-              </select>
+                :items="roleOptions"
+                value-key="value"
+                color="primary"
+                class="w-full"
+              />
             </div>
           </div>
 
           <div class="mt-4 flex flex-wrap gap-3">
-            <button
+            <UButton
+              variant="solid"
+              color="primary"
               :disabled="saving || !hasPendingChanges"
-              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              class="px-4 py-2"
               @click="previewChanges"
             >
               Previsualizar cambios
-            </button>
-            <button
+            </UButton>
+            <UButton
+              variant="solid"
+              color="secondary"
               :disabled="saving || !hasPendingChanges || !isPreviewVisible"
-              class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              class="px-4 py-2"
               @click="confirmAndSaveChanges"
             >
               {{ saving ? 'Guardando...' : 'Confirmar y guardar' }}
-            </button>
-            <button
+            </UButton>
+            <UButton
+              variant="solid"
               :disabled="saving || !hasPendingChanges"
-              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              color="error"
+              class="px-4 py-2"
               @click="discardChanges"
             >
               Descartar cambios
-            </button>
+            </UButton>
           </div>
 
           <div
             v-if="isPreviewVisible && pendingChanges.length"
-            class="mt-4 p-4 rounded-lg border border-amber-200 bg-amber-50"
+            class="mt-4 p-4 rounded-lg ring ring-default bg-elevated"
           >
-            <h3 class="text-sm font-semibold text-amber-900 mb-2">
+            <UBadge
+              color="warning"
+              variant="soft"
+              class="mb-2"
+            >
               Vista previa
-            </h3>
-            <ul class="space-y-2 text-sm text-amber-900">
+            </UBadge>
+            <ul class="space-y-2 text-sm">
               <li
                 v-for="change in pendingChanges"
                 :key="change.field"
               >
                 <span class="font-medium">{{ change.label }}:</span>
-                <span class="line-through text-amber-700">{{ change.before }}</span>
+                <span class="line-through">{{ change.before }}</span>
                 <span class="mx-2">→</span>
                 <span class="font-semibold">{{ change.after }}</span>
               </li>
             </ul>
-            <p class="text-xs text-amber-800 mt-3">
+            <p class="text-xs text-muted mt-3">
               Revisa los cambios y pulsa <strong>Confirmar y guardar</strong> para enviarlos a la base de datos.
             </p>
           </div>
 
-          <p
+          <UAlert
             v-if="saveMessage"
-            :class="[
-              'text-sm mt-2',
-              saveMessageType === 'success' ? 'text-green-600' : 'text-red-600'
-            ]"
-          >
-            {{ saveMessage }}
-          </p>
-        </div>
+            class="mt-3"
+            :color="saveMessageType === 'success' ? 'success' : 'error'"
+            variant="soft"
+            :title="saveMessage"
+          />
+        </UCard>
 
         <!-- Purchase Info Card -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Información de compras
-          </h2>
+        <UCard>
+          <template #header>
+            <h2 class="text-lg font-semibold">
+              Información de compras
+            </h2>
+          </template>
+
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="text-sm text-gray-600">Compras totales</label>
-              <p class="text-2xl font-bold text-gray-900">
+              <label class="text-sm text-muted">Compras totales</label>
+              <p class="text-2xl font-bold ">
                 {{ purchaseCount }}
               </p>
             </div>
             <div>
-              <label class="text-sm text-gray-600">Límite del plan</label>
-              <p class="text-2xl font-bold text-gray-900">
+              <label class="text-sm text-muted">Límite del plan</label>
+              <p class="text-2xl font-bold ">
                 {{ tierLimit === Infinity ? '∞' : tierLimit }}
               </p>
             </div>
@@ -177,53 +192,49 @@
             class="mt-4"
           >
             <div class="flex justify-between text-sm mb-2">
-              <span class="text-gray-600">Uso</span>
-              <span class="text-gray-900">{{ percentageUsed }}%</span>
+              <span class="text-muted">Uso</span>
+              <UBadge
+                :color="usageColor"
+                variant="soft"
+                size="sm"
+              >
+                {{ percentageUsed }}%
+              </UBadge>
             </div>
-            <div class="w-full bg-gray-200 rounded-full h-2">
-              <div
-                :style="{ width: percentageUsed + '%' }"
-                :class="[
-                  'h-2 rounded-full',
-                  percentageUsed > 90 && 'bg-red-500',
-                  percentageUsed > 70 && percentageUsed <= 90 && 'bg-yellow-500',
-                  percentageUsed <= 70 && 'bg-green-500'
-                ]"
-              />
-            </div>
+            <UProgress
+              :model-value="percentageUsed"
+              :color="usageColor"
+            />
           </div>
-        </div>
+        </UCard>
 
         <!-- Subscription Info Card -->
-        <div
-          v-if="user.stripeSubscriptionId"
-          class="bg-white p-6 rounded-lg shadow"
-        >
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Suscripción
-          </h2>
+        <UCard v-if="user.stripeSubscriptionId">
+          <template #header>
+            <h2 class="text-lg font-semibold">
+              Suscripción
+            </h2>
+          </template>
+
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="text-sm text-gray-600">ID de suscripción</label>
-              <p class="text-sm font-mono text-gray-900">
+              <label class="text-sm text-muted">ID de suscripción</label>
+              <p class="text-sm font-mono ">
                 {{ user.stripeSubscriptionId }}
               </p>
             </div>
             <div>
-              <label class="text-sm text-gray-600">Estado</label>
-              <p
-                :class="[
-                  'text-sm font-medium',
-                  user.subscriptionStatus === 'active' && 'text-green-600',
-                  user.subscriptionStatus === 'cancelled' && 'text-gray-600',
-                  user.subscriptionStatus === 'past_due' && 'text-red-600'
-                ]"
+              <label class="text-sm text-muted">Estado</label>
+              <UBadge
+                class="capitalize"
+                :color="subscriptionStatusColor"
+                variant="soft"
               >
                 {{ user.subscriptionStatus }}
-              </p>
+              </UBadge>
             </div>
           </div>
-        </div>
+        </UCard>
       </div>
     </div>
   </div>
@@ -277,6 +288,17 @@ const editedTier = ref<'free' | 'premium' | 'enterprise' | ''>('')
 const editedRole = ref<'user' | 'admin' | ''>('')
 const isPreviewVisible = ref(false)
 
+const tierOptions = [
+  { label: 'Gratis', value: 'free' },
+  { label: 'Premium', value: 'premium' },
+  { label: 'Empresarial', value: 'enterprise' }
+]
+
+const roleOptions = [
+  { label: 'Usuario', value: 'user' },
+  { label: 'Administrador', value: 'admin' }
+]
+
 watch(userData, (nextUser) => {
   if (!nextUser) {
     return
@@ -296,6 +318,30 @@ const tierLimit = computed(() => {
 const percentageUsed = computed(() => {
   if (tierLimit.value === Infinity) return 0
   return Math.round((purchaseCount.value / tierLimit.value) * 100)
+})
+
+const usageColor = computed<'success' | 'warning' | 'error'>(() => {
+  if (percentageUsed.value > 90) {
+    return 'error'
+  }
+
+  if (percentageUsed.value > 70) {
+    return 'warning'
+  }
+
+  return 'success'
+})
+
+const subscriptionStatusColor = computed<'success' | 'neutral' | 'error'>(() => {
+  if (user.value?.subscriptionStatus === 'active') {
+    return 'success'
+  }
+
+  if (user.value?.subscriptionStatus === 'past_due') {
+    return 'error'
+  }
+
+  return 'neutral'
 })
 
 const hasPendingChanges = computed(() => {
