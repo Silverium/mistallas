@@ -201,7 +201,7 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
 
 const { data: photoList, refresh: refreshPhotos, isLoading: photosLoading } = useQuery({
   key: ['purchase-photos'],
-  query: () => {
+  query: async () => {
     if (!selectedPhotoPurchaseId.value) {
       return [] as PurchasePhoto[]
     }
@@ -584,26 +584,6 @@ const diffRows = computed<RowDiff[]>(() => {
               {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template v-if="purchase.price != null">
                 · {{ purchase.price.toFixed(2) }} €
               </template>
-              <span
-                v-if="purchase.photoSlots?.length"
-                class="ml-2 inline-flex items-center gap-1 align-middle"
-              >
-                <button
-                  v-for="slot in purchase.photoSlots"
-                  :key="`preview-${purchase.id}-${slot}`"
-                  type="button"
-                  class="rounded-md ring-1 ring-gray-200 dark:ring-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  :aria-label="`Abrir foto ${slot} de ${purchase.brand}`"
-                  @click="openPreview(purchase, slot)"
-                >
-                  <img
-                    :src="buildPhotoUrl(purchase.id, slot)"
-                    :alt="`Foto ${slot} de ${purchase.brand}`"
-                    class="size-8 rounded-md object-cover"
-                    loading="lazy"
-                  >
-                </button>
-              </span>
             </p>
             <p
               v-if="purchase.notes || purchase.fitFeedback"
@@ -611,14 +591,35 @@ const diffRows = computed<RowDiff[]>(() => {
             >
               {{ purchase.notes || purchase.fitFeedback }}
             </p>
+
+            <div
+              v-if="purchase.photoSlots?.length"
+              class="mt-2 grid grid-cols-3 gap-2"
+            >
+              <button
+                v-for="slot in purchase.photoSlots"
+                :key="`preview-${purchase.id}-${slot}`"
+                type="button"
+                class="aspect-square w-full overflow-hidden rounded-md ring-1 ring-gray-200 dark:ring-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                :aria-label="`Abrir foto ${slot} de ${purchase.brand}`"
+                @click="openPreview(purchase, slot)"
+              >
+                <img
+                  :src="buildPhotoUrl(purchase.id, slot)"
+                  :alt="`Foto ${slot} de ${purchase.brand}`"
+                  class="size-full object-cover"
+                  loading="lazy"
+                >
+              </button>
+            </div>
           </div>
 
-          <div class="flex flex-col sm:flex-row gap-2">
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <UButton
               variant="soft"
               color="neutral"
               icon="i-lucide-pencil"
-              class="shrink-0"
+              class="h-8 w-full justify-center text-center sm:h-10"
               @click="startEditing(purchase)"
             >
               Editar
@@ -627,24 +628,40 @@ const diffRows = computed<RowDiff[]>(() => {
               color="error"
               variant="soft"
               icon="i-lucide-trash"
-              class="shrink-0"
+              class="h-8 w-full justify-center text-center sm:h-10"
               :loading="deletingPurchase && deletingPurchaseId === purchase.id"
               @click="confirmAndDelete(purchase)"
             >
               Eliminar
             </UButton>
 
-            <div class="flex items-center gap-2 flex-wrap">
-              <UButton
-                type="button"
-                icon="i-lucide-camera"
-                color="neutral"
-                variant="soft"
-                @click="openPhotosForPurchase(purchase)"
-              >
-                {{ selectedPhotoPurchaseId === purchase.id ? 'Ocultar fotos' : 'Gestionar fotos' }}
-              </UButton>
+            <UButton
+              type="button"
+              icon="i-lucide-camera"
+              color="neutral"
+              variant="soft"
+              class="h-8 w-full justify-center text-center sm:h-10"
+              @click="openPhotosForPurchase(purchase)"
+            >
+              {{ selectedPhotoPurchaseId === purchase.id ? 'Ocultar fotos' : 'Gestionar fotos' }}
+            </UButton>
 
+            <UButton
+              variant="soft"
+              icon="i-lucide-git-compare"
+              class="h-8 w-full justify-center text-center whitespace-normal sm:h-10"
+              :loading="comparing && selectedPurchase?.id === purchase.id"
+              @click="comparePurchase(purchase)"
+            >
+              Comparar medidas
+            </UButton>
+          </div>
+
+          <div
+            v-if="selectedPhotoPurchaseId === purchase.id"
+            class="space-y-2"
+          >
+            <div class="flex flex-wrap items-center gap-2">
               <UButton
                 v-if="selectedPhotoPurchaseId === purchase.id"
                 type="button"
@@ -656,49 +673,40 @@ const diffRows = computed<RowDiff[]>(() => {
                 Subir foto
               </UButton>
 
-              <div
-                v-if="selectedPhotoPurchaseId === purchase.id"
-                class="flex gap-2"
+              <UBadge
+                v-if="photosLoading"
+                color="neutral"
+                variant="subtle"
               >
-                <div
-                  v-for="item in filteredPhotoList"
-                  :key="item.id"
-                  class="relative group"
-                >
-                  <UAvatar
-                    :src="`/api/purchases/${purchase.id}/photos/${item.slot}`"
-                    size="lg"
-                    square
-                  />
-                  <UButton
-                    class="absolute top-0 right-0 opacity-0 group-hover:opacity-100"
-                    color="error"
-                    variant="ghost"
-                    icon="i-lucide-x"
-                    size="xs"
-                    @click="deletePhoto(purchase.id, item.slot)"
-                  />
-                </div>
-
-                <UBadge
-                  v-if="photosLoading"
-                  color="neutral"
-                  variant="subtle"
-                >
-                  Cargando...
-                </UBadge>
-              </div>
+                Cargando...
+              </UBadge>
             </div>
 
-            <UButton
-              variant="soft"
-              icon="i-lucide-git-compare"
-              class="flex-1"
-              :loading="comparing && selectedPurchase?.id === purchase.id"
-              @click="comparePurchase(purchase)"
+            <div
+              v-if="filteredPhotoList.length"
+              class="grid grid-cols-3 gap-2 sm:grid-cols-6"
             >
-              Comparar con mis medidas actuales
-            </UButton>
+              <div
+                v-for="item in filteredPhotoList"
+                :key="item.id"
+                class="relative aspect-square overflow-hidden rounded-md group"
+              >
+                <img
+                  :src="`/api/purchases/${purchase.id}/photos/${item.slot}`"
+                  :alt="`Foto ${item.slot} de ${purchase.brand}`"
+                  class="size-full rounded-md object-cover"
+                  loading="lazy"
+                >
+                <UButton
+                  class="absolute right-1 top-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  color="error"
+                  variant="solid"
+                  icon="i-lucide-x"
+                  size="xs"
+                  @click="deletePhoto(purchase.id, item.slot)"
+                />
+              </div>
+            </div>
           </div>
         </li>
       </ul>
