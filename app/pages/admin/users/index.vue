@@ -62,175 +62,87 @@
           v-else
           class="divide-y divide-gray-200"
         >
-          <!-- Mobile first: tarjetas -->
-          <div class="md:hidden">
-            <article
-              v-for="user in users"
-              :key="user.id"
-              class="p-4 space-y-3"
-            >
+          <article
+            v-for="user in users"
+            :key="user.id"
+            class="p-4 space-y-3"
+          >
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
+                ID de usuario
+              </p>
+              <code class="text-xs bg-elevated px-2 py-1 rounded break-all">{{ user.id }}</code>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
-                  ID de usuario
+                  Plan
                 </p>
-                <code class="text-xs bg-elevated px-2 py-1 rounded break-all">{{ user.id }}</code>
+                <UBadge
+                  :color="getTierBadgeColor(user.tier)"
+                  variant="soft"
+                >
+                  {{ user.tier === 'free' ? 'Gratis' : user.tier === 'premium' ? 'Premium' : 'Empresarial' }}
+                </UBadge>
               </div>
-
-              <div class="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
-                    Plan
-                  </p>
-                  <UBadge
-                    :color="getTierBadgeColor(user.tier)"
-                    variant="soft"
-                  >
-                    {{ user.tier === 'free' ? 'Gratis' : user.tier === 'premium' ? 'Premium' : 'Empresarial' }}
-                  </UBadge>
-                </div>
-                <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
-                    Rol
-                  </p>
-                  <UBadge
-                    :color="getRoleBadgeColor(user.role)"
-                    variant="soft"
-                  >
-                    {{ user.role === 'user' ? 'Usuario' : 'Administrador' }}
-                  </UBadge>
-                </div>
-                <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
-                    Compras
-                  </p>
-                  <p>
-                    {{ user.purchaseCount }}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
-                    Proveedor
-                  </p>
-                  <p class="capitalize">
-                    {{ user.loginProvider }}
-                  </p>
-                </div>
-              </div>
-
               <div>
                 <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
-                  Alta
+                  Rol
                 </p>
-                <p class="text-sm">
-                  {{ new Date(user.createdAt).toLocaleDateString() }}
+                <UBadge
+                  :color="getRoleBadgeColor(user.role)"
+                  variant="soft"
+                >
+                  {{ user.role === 'user' ? 'Usuario' : 'Administrador' }}
+                </UBadge>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
+                  Compras
+                </p>
+                <p>
+                  {{ user.purchaseCount }}
                 </p>
               </div>
-
-              <div class="flex flex-wrap gap-3 pt-1">
-                <UButton
-                  :to="`/admin/users/${user.id}`"
-                  variant="link"
-                  color="primary"
-                  size="sm"
-                >
-                  Editar
-                </UButton>
-                <UButton
-                  variant="link"
-                  color="error"
-                  size="sm"
-                  @click="deleteUser(user.id)"
-                >
-                  Eliminar
-                </UButton>
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
+                  Proveedor
+                </p>
+                <p class="capitalize">
+                  {{ user.loginProvider }}
+                </p>
               </div>
-            </article>
-          </div>
+            </div>
 
-          <!-- Desktop: tabla -->
-          <div class="hidden md:block overflow-x-auto">
-            <table class="min-w-full">
-              <thead class="bg-elevated border-b border-default">
-                <tr>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    ID de usuario
-                  </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    Plan
-                  </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    Rol
-                  </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    Compras
-                  </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    Proveedor
-                  </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    Alta
-                  </th>
-                  <th class="px-6 py-3 text-left text-sm font-semibold">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-default">
-                <tr
-                  v-for="user in users"
-                  :key="`desktop-${user.id}`"
-                  class="hover:bg-elevated/50"
-                >
-                  <td class="px-6 py-4 text-sm">
-                    <code class="text-xs bg-elevated px-2 py-1 rounded">{{ user.id }}</code>
-                  </td>
-                  <td class="px-6 py-4 text-sm">
-                    <UBadge
-                      :color="getTierBadgeColor(user.tier)"
-                      variant="soft"
-                    >
-                      {{ user.tier === 'free' ? 'Gratis' : user.tier === 'premium' ? 'Premium' : 'Empresarial' }}
-                    </UBadge>
-                  </td>
-                  <td class="px-6 py-4 text-sm">
-                    <UBadge
-                      :color="getRoleBadgeColor(user.role)"
-                      variant="soft"
-                    >
-                      {{ user.role === 'user' ? 'Usuario' : 'Administrador' }}
-                    </UBadge>
-                  </td>
-                  <td class="px-6 py-4 text-sm">
-                    {{ user.purchaseCount }}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-muted">
-                    {{ user.loginProvider }}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-muted">
-                    {{ new Date(user.createdAt).toLocaleDateString() }}
-                  </td>
-                  <td class="px-6 py-4 text-sm flex items-center gap-2">
-                    <UButton
-                      :to="`/admin/users/${user.id}`"
-                      variant="link"
-                      color="primary"
-                      size="sm"
-                    >
-                      Editar
-                    </UButton>
-                    <UButton
-                      variant="link"
-                      color="error"
-                      size="sm"
-                      @click="deleteUser(user.id)"
-                    >
-                      Eliminar
-                    </UButton>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <div>
+              <p class="text-xs font-medium uppercase tracking-wide text-muted mb-1">
+                Alta
+              </p>
+              <p class="text-sm">
+                {{ new Date(user.createdAt).toLocaleDateString() }}
+              </p>
+            </div>
+
+            <div class="flex flex-wrap gap-3 pt-1">
+              <UButton
+                :to="`/admin/users/${user.id}`"
+                variant="link"
+                color="primary"
+                size="sm"
+              >
+                Editar
+              </UButton>
+              <UButton
+                variant="link"
+                color="error"
+                size="sm"
+                @click="deleteUser(user.id)"
+              >
+                Eliminar
+              </UButton>
+            </div>
+          </article>
         </div>
       </div>
 
