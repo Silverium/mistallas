@@ -124,17 +124,17 @@
               </p>
             </div>
 
-            <div class="flex flex-wrap gap-3 pt-1">
+            <div class="flex flex-wrap gap-3 pt-1 justify-between">
               <UButton
                 :to="`/admin/users/${user.id}`"
-                variant="link"
+                variant="soft"
                 color="primary"
                 size="sm"
               >
                 Editar
               </UButton>
               <UButton
-                variant="link"
+                variant="soft"
                 color="error"
                 size="sm"
                 @click="deleteUser(user.id)"
@@ -272,8 +272,8 @@ function getTierBadgeColor(tier: AdminUser['tier']): 'neutral' | 'primary' | 'se
   return 'neutral'
 }
 
-function getRoleBadgeColor(role: AdminUser['role']): 'neutral' | 'error' {
-  return role === 'admin' ? 'error' : 'neutral'
+function getRoleBadgeColor(role: AdminUser['role']): 'neutral' | 'warning' {
+  return role === 'admin' ? 'warning' : 'neutral'
 }
 
 async function deleteUser(userId: string) {
