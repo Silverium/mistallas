@@ -245,15 +245,6 @@ definePageMeta({
   middleware: 'admin'
 })
 
-function getPurchaseLimit(tier: 'free' | 'premium' | 'enterprise'): number {
-  const limits: Record<'free' | 'premium' | 'enterprise', number> = {
-    free: 200,
-    premium: 5000,
-    enterprise: Infinity
-  }
-  return limits[tier]
-}
-
 const route = useRoute()
 const userId = route.params.id as string
 const userDataKey = `admin-user-${userId}`
@@ -271,6 +262,22 @@ interface AdminUserDetail {
   subscriptionStatus?: 'active' | 'cancelled' | 'past_due' | null
   deletedAt?: string | null
 }
+
+interface TierInfo {
+  tier: 'free' | 'premium' | 'enterprise'
+  label: string
+  price: number
+  limit: number
+}
+
+const { data: tiersData } = await useAsyncData<TierInfo[]>(
+  'account-tiers',
+  async () => {
+    const response = await $fetch<{ tiers: TierInfo[] }>('/api/account/tiers')
+    return response.tiers
+  },
+  { default: () => [] as TierInfo[] }
+)
 
 const { data: userData, pending: loading, refresh: refreshUser } = await useAsyncData<AdminUserDetail | null>(
   userDataKey,
@@ -312,7 +319,8 @@ watch(userData, (nextUser) => {
 const purchaseCount = computed(() => user.value?.purchaseCount ?? 0)
 
 const tierLimit = computed(() => {
-  return getPurchaseLimit(editedTier.value as 'free' | 'premium' | 'enterprise')
+  const tier = tiersData.value?.find(t => t.tier === editedTier.value)
+  return tier?.limit ?? 0
 })
 
 const percentageUsed = computed(() => {

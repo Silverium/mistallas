@@ -7,7 +7,9 @@ const mocks = vi.hoisted(() => {
 
   const state = {
     purchaseCount: 0,
-    measurements: [] as Array<{ id: number, userId: string, recordedAt: Date }>
+    measurements: [] as Array<{ id: number, userId: string, recordedAt: Date }>,
+    createdPurchase: { id: 101, userId: 'user-1' },
+    createdSnapshot: { id: 202, purchaseEventId: 101, userId: 'user-1' }
   }
 
   const tables = {
@@ -36,6 +38,19 @@ const mocks = vi.hoisted(() => {
             return state.measurements
           return []
         }
+      })
+    })),
+    insert: vi.fn((table: { __table: string }) => ({
+      values: () => ({
+        returning: () => ({
+          get: async () => {
+            if (table === tables.purchaseEvents)
+              return state.createdPurchase
+            if (table === tables.purchaseMeasurementSnapshots)
+              return state.createdSnapshot
+            return null
+          }
+        })
       })
     }))
   }
@@ -84,8 +99,8 @@ vi.mock('#imports', () => ({
   useRuntimeConfig: () => ({
     tierLimits: {
       free: 200,
-      premium: 5000,
-      enterprise: Infinity
+      premium: 500,
+      enterprise: 10000
     }
   })
 }))
@@ -102,6 +117,8 @@ describe('POST /api/purchases tier enforcement', () => {
 
     mocks.state.purchaseCount = 0
     mocks.state.measurements = []
+    mocks.state.createdPurchase = { id: 101, userId: 'user-1' }
+    mocks.state.createdSnapshot = { id: 202, purchaseEventId: 101, userId: 'user-1' }
 
     mocks.useValidatedBody.mockResolvedValue({
       brand: 'Nike',
@@ -113,7 +130,7 @@ describe('POST /api/purchases tier enforcement', () => {
 
   it('uses current user tier for limit checks', async () => {
     mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-1', tier: 'premium' } })
-    mocks.state.purchaseCount = 5000
+    mocks.state.purchaseCount = 500
 
     const { default: handler } = await import('./index.post')
 
@@ -132,9 +149,37 @@ describe('POST /api/purchases tier enforcement', () => {
     await expect(handler({} as never)).rejects.toMatchObject({ statusCode: 403 })
   })
 
-  it('does not tier-block premium user below limit and continues business flow', async () => {
+  it('creates a purchase and measurement snapshot for a premium user below the limit', async () => {
     mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-3', tier: 'premium' } })
-    mocks.state.purchaseCount = 4999
+    mocks.state.purchaseCount = 499
+    mocks.state.measurements = [{
+      id: 1,
+      userId: 'user-3',
+      recordedAt: new Date('2026-01-01T10:00:00.000Z')
+    }]
+    mocks.useValidatedBody.mockResolvedValue({
+      brand: 'Nike',
+      category: 'Shoes',
+      productType: 'Sneaker',
+      sizeLabel: '42',
+      measurementId: 1
+    })
+
+    const { default: handler } = await import('./index.post')
+
+    await expect(handler({} as never)).resolves.toEqual({
+      purchase: mocks.state.createdPurchase,
+      snapshot: mocks.state.createdSnapshot
+    })
+
+    expect(mocks.dbClient.insert).toHaveBeenCalledTimes(2)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(1, mocks.tables.purchaseEvents)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(2, mocks.tables.purchaseMeasurementSnapshots)
+  })
+
+  it('requires a measurement when none exist, even if the user is under the tier limit', async () => {
+    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-4', tier: 'premium' } })
+    mocks.state.purchaseCount = 499
 
     const { default: handler } = await import('./index.post')
 

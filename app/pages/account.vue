@@ -1,254 +1,559 @@
 <template>
-  <div class="bg-gray-50">
-    <div class="max-w-4xl mx-auto px-4 py-8">
-      <div class="flex items-center justify-between mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">
-          Ajustes de la cuenta
-        </h1>
-        <NuxtLink
+  <div class="bg-default min-h-screen">
+    <div class="mx-auto max-w-7xl px-4 py-8 lg:px-8">
+      <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">
+            Ajustes de la cuenta
+          </h1>
+          <p class="mt-2 text-muted">
+            Revisa tu plan, el uso de compras y el estado de tu suscripción.
+          </p>
+        </div>
+
+        <UButton
           to="/"
-          class="text-gray-600 hover:text-gray-900"
+          icon="i-lucide-arrow-left"
+          variant="outline"
+          color="neutral"
         >
           Volver al inicio
-        </NuxtLink>
+        </UButton>
       </div>
+
+      <UAlert
+        v-if="checkoutAlert"
+        class="mb-6"
+        :color="checkoutAlert.color"
+        variant="soft"
+        :title="checkoutAlert.title"
+        :description="checkoutAlert.description"
+      />
+
+      <UAlert
+        v-if="pageErrorMessage"
+        class="mb-6"
+        color="error"
+        variant="soft"
+        title="No se pudo cargar la cuenta"
+        :description="pageErrorMessage"
+      />
+
+      <UAlert
+        v-if="actionError"
+        class="mb-6"
+        color="error"
+        variant="soft"
+        title="No se pudo actualizar el plan"
+        :description="actionError"
+      />
 
       <div
         v-if="loading"
-        class="text-center text-gray-500"
+        class="space-y-6"
       >
-        Cargando la información de la cuenta...
+        <UCard>
+          <template #header>
+            <USkeleton class="h-6 w-48" />
+          </template>
+
+          <div class="space-y-4">
+            <USkeleton class="h-4 w-40" />
+            <USkeleton class="h-10 w-56" />
+            <USkeleton class="h-3 w-full" />
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <USkeleton class="h-6 w-40" />
+          </template>
+
+          <div class="grid gap-4 md:grid-cols-3">
+            <USkeleton
+              v-for="index in 3"
+              :key="index"
+              class="h-44 rounded-xl"
+            />
+          </div>
+        </UCard>
       </div>
+
       <div
         v-else
         class="space-y-6"
       >
-        <!-- Tier Info Card -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Cuenta
-          </h2>
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm text-gray-600">
-                Plan
-              </p>
-              <p class="text-3xl font-bold text-gray-900 capitalize">
+        <UCard>
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 class="text-lg font-semibold">
+                  Cuenta
+                </h2>
+                <p class="text-sm text-muted">
+                  Información general del plan y su consumo.
+                </p>
+              </div>
+
+              <UBadge
+                :color="tierBadgeColor(profile.tier)"
+                variant="soft"
+                size="lg"
+              >
                 {{ tierLabel(profile.tier) }}
-              </p>
-              <p class="text-sm text-gray-600 mt-2">
-                {{ profile.purchaseCount }} / {{ profile.limit === Infinity ? '∞' : profile.limit }} compras utilizadas
-              </p>
+              </UBadge>
             </div>
-            <div
-              v-if="profile.limit !== Infinity"
-              class="w-48"
-            >
-              <div class="mb-2">
-                <div class="flex justify-between text-sm mb-2">
-                  <span class="text-gray-600">Uso</span>
-                  <span class="text-gray-900">{{ percentageUsed }}%</span>
+          </template>
+
+          <div class="space-y-6">
+            <div class="rounded-2xl bg-elevated/70 p-5 ring ring-default lg:p-6">
+              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                    Plan actual
+                  </p>
+                  <p class="mt-2 wrap-break-word text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
+                    {{ tierLabel(profile.tier) }}
+                  </p>
+                  <p class="mt-2 max-w-2xl text-sm leading-6 text-muted">
+                    {{ tierDescription(profile.tier) }}
+                  </p>
                 </div>
-                <div class="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    :style="{ width: percentageUsed + '%' }"
-                    :class="[
-                      'h-3 rounded-full transition-colors',
-                      percentageUsed > 90 && 'bg-red-500',
-                      percentageUsed > 70 && percentageUsed <= 90 && 'bg-yellow-500',
-                      percentageUsed <= 70 && 'bg-green-500'
-                    ]"
-                  />
+
+                <div class="w-full shrink-0 rounded-2xl bg-default px-4 py-3 ring ring-default sm:w-auto sm:min-w-56">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                    Estado
+                  </p>
+                  <p class="mt-1 wrap-break-word font-semibold leading-5">
+                    {{ profile.subscriptionStatus ? subscriptionStatusLabel(profile.subscriptionStatus) : 'Sin suscripción activa' }}
+                  </p>
                 </div>
               </div>
-              <p
-                v-if="percentageUsed >= 90"
-                class="text-sm text-red-600 mt-2"
-              >
-                ¡Estás cerca de tu límite!
+            </div>
+
+            <div class="rounded-2xl bg-elevated p-5 ring ring-default lg:p-6">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                    Uso de compras
+                  </p>
+                  <p class="mt-2 wrap-break-word text-xl font-semibold tracking-tight lg:text-2xl">
+                    {{ profile.purchaseCount }} / {{ formatLimit(profile.limit) }}
+                  </p>
+                </div>
+
+                <UBadge
+                  :color="usageColor"
+                  variant="soft"
+                  size="lg"
+                >
+                  {{ percentageUsed }}%
+                </UBadge>
+              </div>
+
+              <UProgress
+                class="mt-5"
+                :model-value="usageProgress"
+                :color="usageColor"
+              />
+
+              <p class="mt-3 text-sm text-muted">
+                {{ profile.purchaseCount }} / {{ formatLimit(profile.limit) }} compras utilizadas.
               </p>
             </div>
-          </div>
-        </div>
 
-        <!-- Upgrade Options -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Mejora tu plan
-          </h2>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <UAlert
+              v-if="isNearLimit"
+              class="mt-5"
+              color="warning"
+              variant="soft"
+              title="Estás cerca de tu límite"
+              :description="limitWarningMessage"
+            />
+          </div>
+        </UCard>
+
+        <UCard>
+          <template #header>
+            <div>
+              <h2 class="text-lg font-semibold">
+                Mejora tu plan
+              </h2>
+              <p class="text-sm text-muted">
+                Elige el plan que mejor encaje con tu uso.
+              </p>
+            </div>
+          </template>
+
+          <div class="grid gap-4 md:grid-cols-3">
             <div
               v-for="tier in tiers"
               :key="tier.tier"
               :class="[
-                'p-4 border-2 rounded-lg',
-                profile.tier === tier.tier ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                'flex h-full flex-col rounded-xl bg-elevated p-4 ring ring-default transition-colors',
+                profile.tier === tier.tier && 'ring-2 ring-primary'
               ]"
             >
-              <p class="text-lg font-semibold text-gray-900">
-                {{ tier.label }}
-              </p>
-              <p class="text-2xl font-bold text-gray-900 mt-2">
-                {{ tier.price }}€
-              </p>
-              <p class="text-sm text-gray-600 mt-1">
-                {{ tier.limit === Infinity ? 'Compras ilimitadas' : `${tier.limit} compras` }}
-              </p>
-              <button
-                v-if="profile.tier !== tier.tier"
-                :disabled="upgrading || downgrading"
-                :class="[
-                  'w-full mt-4 px-4 py-2 rounded-lg disabled:opacity-50',
-                  tier.tier === 'free' ? 'border border-gray-300 hover:bg-gray-50' : tier.tier === 'enterprise' ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-blue-600 text-white hover:bg-blue-700'
-                ]"
-                @click="isTierUpgrade(profile.tier, tier.tier) ? upgrade(tier.tier) : downgrade(tier.tier)"
-              >
-                {{
-                  isTierUpgrade(profile.tier, tier.tier)
-                    ? upgrading ? 'Redirigiendo...' : 'Mejorar plan'
-                    : downgrading ? 'Cambiando...' : 'Bajar plan'
-                }}
-              </button>
-              <p
-                v-else
-                class="w-full mt-4 text-center text-sm text-gray-600"
-              >
-                Plan actual
-              </p>
-              <button
-                v-if="profile.tier === tier.tier && profile.subscriptionStatus === 'active' && tier.tier !== 'free'"
-                :disabled="downgrading"
-                class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
-                @click="downgrade(tier.tier === 'enterprise' ? 'premium' : 'free')"
-              >
-                {{ downgrading ? 'Cambiando...' : `Bajar ${tier.tier === 'enterprise' ? 'a Premium' : 'plan'}` }}
-              </button>
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-lg font-semibold">
+                    {{ tier.label }}
+                  </p>
+                  <p class="text-sm text-muted">
+                    {{ tier.limit === Infinity ? 'Compras ilimitadas' : `${tier.limit} compras` }}
+                  </p>
+                </div>
+
+                <UBadge
+                  v-if="profile.tier === tier.tier"
+                  color="primary"
+                  variant="soft"
+                >
+                  Plan actual
+                </UBadge>
+              </div>
+
+              <div class="mt-5 space-y-1">
+                <p class="text-3xl font-bold">
+                  {{ formatPrice(tier.price) }}
+                </p>
+                <p class="text-sm text-muted">
+                  al mes
+                </p>
+              </div>
+
+              <div class="mt-5 space-y-3">
+                <p class="text-sm text-muted">
+                  {{ tierDescription(tier.tier) }}
+                </p>
+
+                <UButton
+                  v-if="profile.tier !== tier.tier"
+                  block
+                  :color="isTierUpgrade(profile.tier, tier.tier) ? 'primary' : 'neutral'"
+                  :variant="isTierUpgrade(profile.tier, tier.tier) ? 'solid' : 'outline'"
+                  :disabled="upgrading || downgrading"
+                  :loading="pendingTier === tier.tier"
+                  @click="handleTierAction(profile.tier, tier.tier)"
+                >
+                  {{ isTierUpgrade(profile.tier, tier.tier) ? 'Mejorar plan' : 'Bajar plan' }}
+                </UButton>
+
+                <template v-else>
+                  <UButton
+                    block
+                    variant="soft"
+                    color="neutral"
+                    disabled
+                  >
+                    Plan actual
+                  </UButton>
+
+                  <UButton
+                    v-if="profile.subscriptionStatus === 'active' && tier.tier !== 'free'"
+                    block
+                    :color="tier.tier === 'enterprise' ? 'secondary' : 'neutral'"
+                    :variant="tier.tier === 'enterprise' ? 'solid' : 'outline'"
+                    :disabled="downgrading"
+                    :loading="pendingTier === downgradeTargetTier(tier.tier)"
+                    @click="downgrade(downgradeTargetTier(tier.tier))"
+                  >
+                    {{ downgrading && pendingTier === downgradeTargetTier(tier.tier) ? 'Cambiando...' : `Bajar a ${tier.tier === 'enterprise' ? 'Premium' : 'Gratis'}` }}
+                  </UButton>
+                </template>
+              </div>
             </div>
           </div>
-        </div>
+        </UCard>
 
-        <!-- Subscription Info -->
-        <div
-          v-if="profile.subscriptionStatus"
-          class="bg-white p-6 rounded-lg shadow"
-        >
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">
-            Suscripción
-          </h2>
-          <div class="flex items-center justify-between">
+        <UCard v-if="profile.subscriptionStatus">
+          <template #header>
+            <h2 class="text-lg font-semibold">
+              Suscripción
+            </h2>
+          </template>
+
+          <div class="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p class="text-sm text-gray-600">
+              <p class="text-sm text-muted">
                 Estado
               </p>
-              <p
-                :class="[
-                  'text-lg font-semibold',
-                  profile.subscriptionStatus === 'active' && 'text-green-600',
-                  profile.subscriptionStatus === 'cancelled' && 'text-gray-600',
-                  profile.subscriptionStatus === 'past_due' && 'text-red-600'
-                ]"
-              >
-                {{ profile.subscriptionStatus }}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Error Messages -->
-      <div
-        v-if="error"
-        class="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800"
-      >
-        {{ error }}
+              <UBadge
+                class="mt-2 capitalize"
+                :color="subscriptionStatusColor(profile.subscriptionStatus)"
+                variant="soft"
+              >
+                {{ subscriptionStatusLabel(profile.subscriptionStatus) }}
+              </UBadge>
+            </div>
+
+            <p class="text-sm text-muted">
+              {{ subscriptionStatusDescription(profile.subscriptionStatus) }}
+            </p>
+          </div>
+        </UCard>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { getSpanishApiErrorMessage } from '~/utils/errors'
+
 definePageMeta({
   middleware: 'auth'
 })
 
+type Tier = 'free' | 'premium' | 'enterprise'
+
 interface UserProfile {
   id?: string
-  tier: 'free' | 'premium' | 'enterprise'
+  tier: Tier
   purchaseCount: number
   limit: number
-  subscriptionStatus: string | null
+  subscriptionStatus: 'active' | 'cancelled' | 'past_due' | null
 }
 
 interface TierInfo {
-  tier: 'free' | 'premium' | 'enterprise'
+  tier: Tier
   label: string
   price: number
   limit: number
 }
 
-const profile = ref<UserProfile>({
+interface AccountResponse {
+  profile: UserProfile
+  tiers: TierInfo[]
+}
+
+const route = useRoute()
+
+const createDefaultProfile = (): UserProfile => ({
   tier: 'free',
   purchaseCount: 0,
   limit: 200,
   subscriptionStatus: null
 })
 
-const tiers = ref<TierInfo[]>([
-  { tier: 'free', label: 'Gratis', price: 0, limit: 200 },
-  { tier: 'premium', label: 'Premium', price: 1, limit: 500 },
-  { tier: 'enterprise', label: 'Empresarial', price: 10, limit: Infinity }
-])
+const createDefaultTiers = (): TierInfo[] => []
 
-const tierOrder = ['free', 'premium', 'enterprise'] as const
+const { data: accountData, pending, error: accountError, refresh } = await useAsyncData<AccountResponse>(
+  'account-data',
+  async () => {
+    const [profileResponse, tiersResponse] = await Promise.all([
+      $fetch<UserProfile>('/api/account/profile'),
+      $fetch<{ tiers: TierInfo[] }>('/api/account/tiers')
+    ])
 
-const isTierUpgrade = (from: string, to: string): boolean => {
-  return tierOrder.indexOf(to as 'free' | 'premium' | 'enterprise') > tierOrder.indexOf(from as 'free' | 'premium' | 'enterprise')
-}
+    return {
+      profile: profileResponse,
+      tiers: tiersResponse.tiers
+    }
+  },
+  {
+    default: () => ({
+      profile: createDefaultProfile(),
+      tiers: createDefaultTiers()
+    })
+  }
+)
 
-const loading = ref(true)
-const upgrading = ref(false)
-const downgrading = ref(false)
-const error = ref('')
+const profile = computed(() => accountData.value?.profile ?? createDefaultProfile())
+const tiers = computed(() => accountData.value?.tiers ?? createDefaultTiers())
+const loading = computed(() => pending.value)
+const pageErrorMessage = computed(() => {
+  if (!accountError.value) {
+    return ''
+  }
 
-const percentageUsed = computed(() => {
-  if (profile.value.limit === Infinity) return 0
-  return Math.round((profile.value.purchaseCount / profile.value.limit) * 100)
+  return getSpanishApiErrorMessage(accountError.value) ?? 'No se pudo cargar la información de tu cuenta.'
 })
 
-async function fetchProfile() {
-  loading.value = true
-  try {
-    const [profileRes, tiersRes] = await Promise.all([
-      useFetch('/api/account/profile'),
-      useFetch('/api/account/tiers')
-    ])
-    if (profileRes.data.value) {
-      profile.value = profileRes.data.value
-    }
-    if (tiersRes.data.value?.tiers) {
-      tiers.value = tiersRes.data.value.tiers
-    }
-  }
-  catch (err) {
-    console.error('Error al cargar perfil:', err)
-    error.value = 'No se pudo cargar la información de la cuenta'
-  }
-  finally {
-    loading.value = false
-  }
+const upgrading = ref(false)
+const downgrading = ref(false)
+const pendingTier = ref<Tier | null>(null)
+const actionError = ref('')
+
+const tierOrder: Tier[] = ['free', 'premium', 'enterprise']
+
+const isTierUpgrade = (from: Tier, to: Tier): boolean => {
+  return tierOrder.indexOf(to) > tierOrder.indexOf(from)
 }
 
-async function upgrade(tierName: string) {
+const checkoutAlert = computed(() => {
+  const upgrade = route.query.upgrade
+  const status = Array.isArray(upgrade) ? upgrade[0] : upgrade
+
+  if (status === 'success') {
+    return {
+      color: 'success' as const,
+      title: 'Suscripción actualizada',
+      description: 'Tu compra se ha iniciado correctamente. Si Stripe aún está procesando el pago, el cambio puede tardar unos segundos en reflejarse.'
+    }
+  }
+
+  if (status === 'cancelled') {
+    return {
+      color: 'warning' as const,
+      title: 'Proceso cancelado',
+      description: 'No se ha completado la compra. Puedes intentarlo de nuevo cuando quieras.'
+    }
+  }
+
+  return null
+})
+
+const percentageUsed = computed(() => {
+  if (profile.value.limit === Infinity) {
+    return 0
+  }
+
+  return Math.min(100, Math.round((profile.value.purchaseCount / profile.value.limit) * 100))
+})
+
+const usageProgress = computed(() => {
+  if (profile.value.limit === Infinity) {
+    return 0
+  }
+
+  return percentageUsed.value
+})
+
+const usageColor = computed(() => {
+  if (profile.value.limit === Infinity) {
+    return 'primary' as const
+  }
+
+  if (percentageUsed.value >= 90) {
+    return 'error' as const
+  }
+
+  if (percentageUsed.value >= 70) {
+    return 'warning' as const
+  }
+
+  return 'success' as const
+})
+
+const isNearLimit = computed(() => profile.value.limit !== Infinity && percentageUsed.value >= 90)
+
+const remainingPurchases = computed(() => {
+  if (profile.value.limit === Infinity) {
+    return '∞'
+  }
+
+  return Math.max(profile.value.limit - profile.value.purchaseCount, 0)
+})
+
+const limitWarningMessage = computed(() => {
+  if (profile.value.limit === Infinity) {
+    return 'Tu plan no tiene límite.'
+  }
+
+  return `Has usado ${percentageUsed.value}% de tu cupo. Te quedan ${remainingPurchases.value} compras antes de llegar al límite.`
+})
+
+function tierLabel(tier: Tier): string {
+  const labels: Record<Tier, string> = {
+    free: 'Gratis',
+    premium: 'Premium',
+    enterprise: 'Empresarial'
+  }
+
+  return labels[tier]
+}
+
+function tierBadgeColor(tier: Tier): 'neutral' | 'primary' | 'secondary' {
+  if (tier === 'premium') {
+    return 'primary'
+  }
+
+  if (tier === 'enterprise') {
+    return 'secondary'
+  }
+
+  return 'neutral'
+}
+
+function subscriptionStatusColor(status: NonNullable<UserProfile['subscriptionStatus']>): 'success' | 'neutral' | 'error' {
+  if (status === 'active') {
+    return 'success'
+  }
+
+  if (status === 'past_due') {
+    return 'error'
+  }
+
+  return 'neutral'
+}
+
+function subscriptionStatusLabel(status: NonNullable<UserProfile['subscriptionStatus']>): string {
+  const labels: Record<NonNullable<UserProfile['subscriptionStatus']>, string> = {
+    active: 'Activa',
+    cancelled: 'Cancelada',
+    past_due: 'Pago pendiente'
+  }
+
+  return labels[status]
+}
+
+function subscriptionStatusDescription(status: NonNullable<UserProfile['subscriptionStatus']>): string {
+  const descriptions: Record<NonNullable<UserProfile['subscriptionStatus']>, string> = {
+    active: 'Tu suscripción está funcionando con normalidad.',
+    cancelled: 'La suscripción se ha cancelado y permanecerá así hasta que la reactives.',
+    past_due: 'Hay un pago pendiente. Revisa tu método de pago en Stripe.'
+  }
+
+  return descriptions[status]
+}
+
+function formatPrice(price: number): string {
+  if (price === 0) {
+    return 'Gratis'
+  }
+
+  return `${price}€`
+}
+
+function formatLimit(limit: number): string {
+  return limit === Infinity ? '∞' : `${limit}`
+}
+
+function tierDescription(tier: Tier): string {
+  const descriptions: Record<Tier, string> = {
+    free: 'Ideal para empezar y registrar tus compras básicas.',
+    premium: 'Pensado para un uso más intensivo con mucho más margen.',
+    enterprise: 'Para un volumen alto sin preocuparte por límites.'
+  }
+
+  return descriptions[tier]
+}
+
+function downgradeTargetTier(tier: Tier): 'free' | 'premium' {
+  return tier === 'enterprise' ? 'premium' : 'free'
+}
+
+async function handleTierAction(from: Tier, to: Tier) {
+  if (isTierUpgrade(from, to)) {
+    await upgrade(to as Exclude<Tier, 'free'>)
+    return
+  }
+
+  await downgrade(to as 'free' | 'premium')
+}
+
+async function upgrade(tierName: Exclude<Tier, 'free'>) {
   upgrading.value = true
-  error.value = ''
+  pendingTier.value = tierName
+  actionError.value = ''
   try {
-    // Map tier to price ID - update these with your actual Stripe price IDs
-    const priceIds: Record<string, string> = {
-      premium: 'price_1234567890', // Update with actual price ID
-      enterprise: 'price_0987654321' // Update with actual price ID
+    const priceIds: Record<Exclude<Tier, 'free'>, string> = {
+      premium: 'price_1234567890',
+      enterprise: 'price_0987654321'
     }
 
-    const response = await $fetch('/api/account/upgrade', {
+    const response = await $fetch<{ redirectUrl: string }>('/api/account/upgrade', {
       method: 'POST',
       body: {
         targetTier: tierName,
@@ -256,56 +561,43 @@ async function upgrade(tierName: string) {
       }
     })
 
-    // Redirect to Stripe checkout
-    const redirectUrl = (response as Record<string, unknown>)?.redirectUrl as string | undefined
-    if (redirectUrl) {
-      window.location.href = redirectUrl
+    if (response.redirectUrl) {
+      window.location.href = response.redirectUrl
     }
   }
   catch (err) {
     console.error('Error al mejorar plan:', err)
-    const errorData = err as { data?: { message?: string } }
-    error.value = errorData.data?.message || 'No se pudo mejorar el plan'
+    actionError.value = getSpanishApiErrorMessage(err) ?? 'No se pudo mejorar el plan.'
+  }
+  finally {
     upgrading.value = false
+    pendingTier.value = null
   }
 }
 
-async function downgrade(tierName: string) {
-  if (!confirm(`¿Seguro que quieres cambiar al plan ${tierLabel(tierName as UserProfile['tier'])}?`)) {
+async function downgrade(tierName: 'free' | 'premium') {
+  if (!confirm(`¿Seguro que quieres cambiar al plan ${tierLabel(tierName)}?`)) {
     return
   }
 
   downgrading.value = true
-  error.value = ''
+  pendingTier.value = tierName
+  actionError.value = ''
   try {
     await $fetch('/api/account/downgrade', {
       method: 'POST',
       body: { targetTier: tierName }
     })
 
-    await fetchProfile()
+    await refresh()
   }
   catch (err) {
     console.error('Error al bajar plan:', err)
-    const errorData = err as { data?: { message?: string } }
-    error.value = errorData.data?.message || 'No se pudo bajar el plan'
+    actionError.value = getSpanishApiErrorMessage(err) ?? 'No se pudo bajar el plan.'
   }
   finally {
     downgrading.value = false
+    pendingTier.value = null
   }
-}
-
-onMounted(async () => {
-  await fetchProfile()
-})
-
-function tierLabel(tier: UserProfile['tier']) {
-  const labels: Record<UserProfile['tier'], string> = {
-    free: 'Gratis',
-    premium: 'Premium',
-    enterprise: 'Empresarial'
-  }
-
-  return labels[tier]
 }
 </script>

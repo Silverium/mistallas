@@ -61,7 +61,7 @@ ADMIN_USER_IDS=your-github-id,your-email@gmail.com
 # Optional: customize tier limits
 NUXT_TIER_LIMIT_FREE=200
 NUXT_TIER_LIMIT_PREMIUM=5000
-NUXT_TIER_LIMIT_ENTERPRISE=infinity
+NUXT_TIER_LIMIT_ENTERPRISE=10000
 ```
 
 ### 4. Initialize the Database
