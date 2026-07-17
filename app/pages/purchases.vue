@@ -69,10 +69,18 @@ const selectedPhotoPurchaseId = ref<number | null>(null)
 const selectedPreviewPurchase = ref<Purchase | null>(null)
 const selectedPreviewSlot = ref<number | null>(null)
 const photoInput = ref<HTMLInputElement | null>(null)
+const directUploadPurchaseId = ref<number | null>(null)
 const historyFilter = useSyncedStringQueryParam('filter')
 const editingPurchaseId = ref<number | null>(null)
 const deletingPurchaseId = ref<number | null>(null)
-const isPurchaseFormVisible = ref(false)
+const isAddPurchaseDialogOpen = ref(false)
+const isEditPurchaseDialogOpen = ref(false)
+const pendingPhotosToUpload = ref<File[]>([])
+
+type PendingPhotoPreview = {
+  file: File
+  previewUrl: string
+}
 
 type RowDiff = {
   key: string
@@ -103,8 +111,14 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
       price: form.price ? Number(form.price) : undefined
     }
   }),
-  async onSuccess() {
+  async onSuccess(data: { purchase: Purchase }) {
     await queryCache.invalidateQueries(purchasesQuery)
+
+    // Upload pending photos after purchase is created
+    if (pendingPhotosToUpload.value.length > 0) {
+      await uploadPendingPhotos(data.purchase.id)
+    }
+
     resetForm()
     toast.add({ title: 'Compra guardada con snapshot de medidas.' })
   },
@@ -137,8 +151,14 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
       price: form.price ? Number(form.price) : undefined
     }
   }),
-  async onSuccess() {
+  async onSuccess(data: Purchase) {
     await queryCache.invalidateQueries(purchasesQuery)
+
+    // Upload pending photos after purchase is updated
+    if (pendingPhotosToUpload.value.length > 0) {
+      await uploadPendingPhotos(data.id)
+    }
+
     resetForm()
     toast.add({ title: 'Compra actualizada correctamente.' })
   },
@@ -211,18 +231,13 @@ const { data: photoList, refresh: refreshPhotos, isLoading: photosLoading } = us
   enabled: () => !!selectedPhotoPurchaseId.value
 })
 
-const openPhotosForPurchase = async (purchase: Purchase) => {
-  if (selectedPhotoPurchaseId.value === purchase.id) {
-    selectedPhotoPurchaseId.value = null
-    return
-  }
-
-  selectedPhotoPurchaseId.value = purchase.id
-  await refreshPhotos()
-}
-
 const triggerPhotoPicker = () => {
   photoInput.value?.click()
+}
+
+const openEditAndAddPhoto = async (purchase: Purchase) => {
+  directUploadPurchaseId.value = purchase.id
+  triggerPhotoPicker()
 }
 
 const buildPhotoUrl = (purchaseId: number, slot: number) => `/api/purchases/${purchaseId}/photos/${slot}`
@@ -260,11 +275,6 @@ const isPreviewOpen = computed({
 })
 
 const uploadPhotoFile = async (purchaseId: number, file: File) => {
-  if (!purchaseId) {
-    toast.add({ title: 'Selecciona una compra primero', color: 'warning' })
-    return
-  }
-
   try {
     const compressedBlob = await compressImage(file)
     const fileBase64 = await blobToBase64(compressedBlob)
@@ -276,14 +286,41 @@ const uploadPhotoFile = async (purchaseId: number, file: File) => {
         mimeType: compressedBlob.type || 'image/webp'
       }
     })
+  }
+  catch (_err) {
+    toast.add({
+      title: getSpanishApiErrorMessage(_err) ?? 'Error al subir foto',
+      color: 'error'
+    })
+    throw _err
+  }
+}
 
+const uploadPendingPhotos = async (purchaseId: number) => {
+  if (!purchaseId || pendingPhotosToUpload.value.length === 0) {
+    return
+  }
+
+  try {
+    // Upload all pending photos sequentially
+    for (const file of pendingPhotosToUpload.value) {
+      await uploadPhotoFile(purchaseId, file)
+    }
+
+    // After all uploads succeed, refresh and notify
     await queryCache.invalidateQueries(purchasesQuery)
-    toast.add({ title: 'Foto subida' })
+    if (pendingPhotosToUpload.value.length === 1) {
+      toast.add({ title: 'Foto subida' })
+    }
+    else {
+      toast.add({ title: `${pendingPhotosToUpload.value.length} fotos subidas` })
+    }
+    pendingPhotosToUpload.value = []
     await refreshPhotos()
   }
-  catch (err) {
+  catch (_err) {
     toast.add({
-      title: getSpanishApiErrorMessage(err) ?? 'Error al subir foto',
+      title: getSpanishApiErrorMessage(_err) ?? 'Error al subir fotos',
       color: 'error'
     })
   }
@@ -293,11 +330,44 @@ const onPhotoInputChange = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
 
-  if (!file || !selectedPhotoPurchaseId.value) {
+  if (!file) {
     return
   }
 
-  await uploadPhotoFile(selectedPhotoPurchaseId.value, file)
+  // Direct upload from list view
+  if (directUploadPurchaseId.value) {
+    const purchaseId = directUploadPurchaseId.value
+    directUploadPurchaseId.value = null
+
+    try {
+      const compressedBlob = await compressImage(file)
+      const fileBase64 = await blobToBase64(compressedBlob)
+
+      await $fetch(`/api/purchases/${purchaseId}/photos`, {
+        method: 'POST',
+        body: {
+          fileBase64,
+          mimeType: compressedBlob.type || 'image/webp'
+        }
+      })
+
+      await queryCache.invalidateQueries(purchasesQuery)
+      toast.add({ title: 'Foto subida' })
+      await refreshPhotos()
+    }
+    catch (_err) {
+      toast.add({
+        title: getSpanishApiErrorMessage(_err) ?? 'Error al subir foto',
+        color: 'error'
+      })
+    }
+  }
+  // Pending upload from edit dialog
+  else if (editingPurchaseId.value) {
+    pendingPhotosToUpload.value.push(file)
+    toast.add({ title: 'Foto agregada (se subirá al guardar)' })
+  }
+
   input.value = ''
 }
 
@@ -354,12 +424,44 @@ const resetForm = () => {
   form.notes = ''
   form.price = ''
   editingPurchaseId.value = null
-  isPurchaseFormVisible.value = false
+  selectedPhotoPurchaseId.value = null
+  isEditPurchaseDialogOpen.value = false
+  isAddPurchaseDialogOpen.value = false
+  // Revoke preview URLs to free memory
+  pendingPhotosPreviews.value.forEach((preview) => {
+    URL.revokeObjectURL(preview.previewUrl)
+  })
+  pendingPhotosToUpload.value = []
+}
+
+const closeEditModal = () => {
+  resetForm()
+}
+
+const isEditModalOpen = computed({
+  get: () => isEditPurchaseDialogOpen.value,
+  set: (value: boolean) => {
+    if (!value) {
+      // Only reset when modal is closing, not when opening
+      closeEditModal()
+    }
+    else {
+      isEditPurchaseDialogOpen.value = true
+    }
+  }
+})
+
+const startAddingPurchase = () => {
+  resetForm()
+  pendingPhotosToUpload.value = []
+  isAddPurchaseDialogOpen.value = true
 }
 
 const startEditing = (purchase: Purchase) => {
-  isPurchaseFormVisible.value = true
+  isEditPurchaseDialogOpen.value = true
   editingPurchaseId.value = purchase.id
+  selectedPhotoPurchaseId.value = purchase.id
+  pendingPhotosToUpload.value = []
   form.brand = purchase.brand
   form.category = purchase.category
   form.productType = purchase.productType
@@ -410,7 +512,26 @@ const filteredPurchaseList = computed(() => {
 
 const filteredPhotoList = computed(() => (photoList.value ?? []) as PurchasePhoto[])
 
+const pendingPhotosPreviews = computed<PendingPhotoPreview[]>(() => {
+  return pendingPhotosToUpload.value.map(file => ({
+    file,
+    previewUrl: URL.createObjectURL(file)
+  }))
+})
+
+const removePendingPhoto = (index: number) => {
+  const preview = pendingPhotosPreviews.value[index]
+  if (preview) {
+    URL.revokeObjectURL(preview.previewUrl)
+  }
+  pendingPhotosToUpload.value.splice(index, 1)
+}
+
 const fmt = (value: number, unit: string) => `${value.toFixed(1)} ${unit}`
+
+const canAddMorePhotos = (purchase: Purchase) => {
+  return (purchase.photoSlots?.length ?? 0) < 3
+}
 
 const diffRows = computed<RowDiff[]>(() => {
   const snapshot = selectedComparison.value?.snapshotAtPurchase
@@ -470,90 +591,14 @@ const diffRows = computed<RowDiff[]>(() => {
       </p>
       <div class="mt-3">
         <UButton
-          v-if="!isPurchaseFormVisible"
           type="button"
           icon="i-lucide-plus"
-          @click="() => { isPurchaseFormVisible = true }"
+          @click="startAddingPurchase"
         >
           Añadir compra
         </UButton>
       </div>
     </div>
-
-    <form
-      v-if="isPurchaseFormVisible"
-      class="grid grid-cols-1 sm:grid-cols-2 gap-3"
-      @submit.prevent="savePurchase()"
-    >
-      <UInput
-        v-model="form.brand"
-        placeholder="Marca (Nike, Zara...) *"
-        required
-        autofocus
-      />
-      <UInput
-        v-model="form.category"
-        placeholder="Categoría (ropa, calzado...) *"
-        required
-      />
-      <UInput
-        v-model="form.productType"
-        placeholder="Tipo de prenda (t-shirt, jeans...) *"
-        required
-      />
-      <UInput
-        v-model="form.sizeLabel"
-        placeholder="Talla (S, M, L, 42...) *"
-        required
-      />
-      <UInput
-        v-model="form.fitFeedback"
-        placeholder="Feedback de ajuste (opcional)"
-      />
-      <UInput
-        v-model="form.price"
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="Precio (opcional)"
-      />
-      <UInput
-        v-model="form.notes"
-        class="sm:col-span-2"
-        placeholder="Notas (opcional)"
-      />
-
-      <div class="sm:col-span-2 flex flex-wrap gap-2">
-        <UButton
-          type="submit"
-          :icon="editingPurchaseId ? 'i-lucide-save' : 'i-lucide-shopping-cart'"
-          :loading="isSubmitting"
-          :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel"
-        >
-          {{ editingPurchaseId ? 'Guardar cambios' : 'Guardar compra' }}
-        </UButton>
-        <UButton
-          v-if="editingPurchaseId"
-          type="button"
-          variant="soft"
-          color="neutral"
-          icon="i-lucide-x"
-          @click="resetForm"
-        >
-          Cancelar edición
-        </UButton>
-        <UButton
-          v-else
-          type="button"
-          variant="soft"
-          color="neutral"
-          icon="i-lucide-x"
-          @click="resetForm"
-        >
-          Cerrar formulario
-        </UButton>
-      </div>
-    </form>
 
     <div class="space-y-2">
       <h3 class="font-medium">
@@ -593,120 +638,59 @@ const diffRows = computed<RowDiff[]>(() => {
             </p>
 
             <div
-              v-if="purchase.photoSlots?.length"
+              v-if="purchase.photoSlots?.length || canAddMorePhotos(purchase)"
               class="mt-2 grid grid-cols-3 gap-2"
             >
               <button
-                v-for="slot in purchase.photoSlots"
-                :key="`preview-${purchase.id}-${slot}`"
+                v-for="slot in [1, 2, 3]"
+                :key="`photo-${purchase.id}-${slot}`"
                 type="button"
-                class="aspect-square w-full overflow-hidden rounded-md ring-1 ring-gray-200 dark:ring-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                :aria-label="`Abrir foto ${slot} de ${purchase.brand}`"
-                @click="openPreview(purchase, slot)"
+                :class="[
+                  'w-full rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                  purchase.photoSlots?.includes(slot)
+                    ? 'aspect-square overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700'
+                    : 'h-8 sm:h-10 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center align-center my-auto'
+                ]"
+                :aria-label="purchase.photoSlots?.includes(slot) ? `Abrir foto ${slot} de ${purchase.brand}` : `Añadir foto ${slot}`"
+                @click="purchase.photoSlots?.includes(slot) ? openPreview(purchase, slot) : openEditAndAddPhoto(purchase)"
               >
                 <img
+                  v-if="purchase.photoSlots?.includes(slot)"
                   :src="buildPhotoUrl(purchase.id, slot)"
                   :alt="`Foto ${slot} de ${purchase.brand}`"
                   class="size-full object-cover"
                   loading="lazy"
                 >
+                <div
+                  v-else
+                  class="flex items-center justify-center gap-2"
+                >
+                  <span class="text-2xl text-gray-400">+</span>
+                  <span class="text-xs text-gray-400">Foto</span>
+                </div>
               </button>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div class="grid grid-cols-2 gap-2">
             <UButton
               variant="soft"
               color="neutral"
               icon="i-lucide-pencil"
-              class="h-8 w-full justify-center text-center sm:h-10"
+              class="h-10 w-full justify-center text-center sm:h-10"
               @click="startEditing(purchase)"
             >
               Editar
             </UButton>
             <UButton
-              color="error"
-              variant="soft"
-              icon="i-lucide-trash"
-              class="h-8 w-full justify-center text-center sm:h-10"
-              :loading="deletingPurchase && deletingPurchaseId === purchase.id"
-              @click="confirmAndDelete(purchase)"
-            >
-              Eliminar
-            </UButton>
-
-            <UButton
-              type="button"
-              icon="i-lucide-camera"
-              color="neutral"
-              variant="soft"
-              class="h-8 w-full justify-center text-center sm:h-10"
-              @click="openPhotosForPurchase(purchase)"
-            >
-              {{ selectedPhotoPurchaseId === purchase.id ? 'Ocultar fotos' : 'Gestionar fotos' }}
-            </UButton>
-
-            <UButton
               variant="soft"
               icon="i-lucide-git-compare"
-              class="h-8 w-full justify-center text-center whitespace-normal sm:h-10"
+              class="h-10 w-full justify-center text-center sm:h-10"
               :loading="comparing && selectedPurchase?.id === purchase.id"
               @click="comparePurchase(purchase)"
             >
               Comparar medidas
             </UButton>
-          </div>
-
-          <div
-            v-if="selectedPhotoPurchaseId === purchase.id"
-            class="space-y-2"
-          >
-            <div class="flex flex-wrap items-center gap-2">
-              <UButton
-                v-if="selectedPhotoPurchaseId === purchase.id"
-                type="button"
-                icon="i-lucide-upload"
-                color="neutral"
-                variant="soft"
-                @click="triggerPhotoPicker"
-              >
-                Subir foto
-              </UButton>
-
-              <UBadge
-                v-if="photosLoading"
-                color="neutral"
-                variant="subtle"
-              >
-                Cargando...
-              </UBadge>
-            </div>
-
-            <div
-              v-if="filteredPhotoList.length"
-              class="grid grid-cols-3 gap-2 sm:grid-cols-6"
-            >
-              <div
-                v-for="item in filteredPhotoList"
-                :key="item.id"
-                class="relative aspect-square overflow-hidden rounded-md group"
-              >
-                <img
-                  :src="`/api/purchases/${purchase.id}/photos/${item.slot}`"
-                  :alt="`Foto ${item.slot} de ${purchase.brand}`"
-                  class="size-full rounded-md object-cover"
-                  loading="lazy"
-                >
-                <UButton
-                  class="absolute right-1 top-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  color="error"
-                  variant="solid"
-                  icon="i-lucide-x"
-                  size="xs"
-                  @click="deletePhoto(purchase.id, item.slot)"
-                />
-              </div>
-            </div>
           </div>
         </li>
       </ul>
@@ -717,6 +701,258 @@ const diffRows = computed<RowDiff[]>(() => {
         No hay compras que coincidan con el filtro.
       </p>
     </div>
+
+    <!-- Add/Edit Purchase Dialog -->
+    <UModal v-model:open="isAddPurchaseDialogOpen">
+      <template #content>
+        <div class="space-y-4 p-4 sm:p-6">
+          <div>
+            <h3 class="text-lg font-medium">
+              Añadir compra
+            </h3>
+          </div>
+
+          <form
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            @submit.prevent="savePurchase()"
+          >
+            <UInput
+              v-model="form.brand"
+              placeholder="Marca (Nike, Zara...) *"
+              required
+              autofocus
+            />
+            <UInput
+              v-model="form.category"
+              placeholder="Categoría (ropa, calzado...) *"
+              required
+            />
+            <UInput
+              v-model="form.productType"
+              placeholder="Tipo de prenda (t-shirt, jeans...) *"
+              required
+            />
+            <UInput
+              v-model="form.sizeLabel"
+              placeholder="Talla (S, M, L, 42...) *"
+              required
+            />
+            <UInput
+              v-model="form.fitFeedback"
+              placeholder="Feedback de ajuste (opcional)"
+            />
+            <UInput
+              v-model="form.price"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Precio (opcional)"
+            />
+            <UInput
+              v-model="form.notes"
+              class="sm:col-span-2"
+              placeholder="Notas (opcional)"
+            />
+
+            <div class="sm:col-span-2 flex flex-wrap gap-2">
+              <UButton
+                type="submit"
+                icon="i-lucide-shopping-cart"
+                :loading="isSubmitting"
+                :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel"
+              >
+                Guardar compra
+              </UButton>
+              <UButton
+                type="button"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-x"
+                @click="() => { resetForm(); isAddPurchaseDialogOpen = false }"
+              >
+                Cancelar
+              </UButton>
+            </div>
+          </form>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- Edit Purchase Dialog -->
+    <UModal v-model:open="isEditModalOpen">
+      <template #content>
+        <div class="space-y-4 p-4 sm:p-6 max-h-screen overflow-y-auto">
+          <div class="flex items-start justify-between">
+            <h3 class="text-lg font-medium">
+              Editar compra
+            </h3>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-x"
+              @click="closeEditModal"
+            />
+          </div>
+
+          <form
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            @submit.prevent="savePurchase()"
+          >
+            <UInput
+              v-model="form.brand"
+              placeholder="Marca (Nike, Zara...) *"
+              required
+              autofocus
+            />
+            <UInput
+              v-model="form.category"
+              placeholder="Categoría (ropa, calzado...) *"
+              required
+            />
+            <UInput
+              v-model="form.productType"
+              placeholder="Tipo de prenda (t-shirt, jeans...) *"
+              required
+            />
+            <UInput
+              v-model="form.sizeLabel"
+              placeholder="Talla (S, M, L, 42...) *"
+              required
+            />
+            <UInput
+              v-model="form.fitFeedback"
+              placeholder="Feedback de ajuste (opcional)"
+            />
+            <UInput
+              v-model="form.price"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Precio (opcional)"
+            />
+            <UInput
+              v-model="form.notes"
+              class="sm:col-span-2"
+              placeholder="Notas (opcional)"
+            />
+
+            <div class="sm:col-span-2">
+              <USeparator />
+            </div>
+
+            <div class="sm:col-span-2">
+              <h4 class="font-medium mb-3">
+                Fotos ({{ (photoList?.length ?? 0) + pendingPhotosPreviews.length }}/3)
+              </h4>
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <UButton
+                    v-if="(photoList?.length ?? 0) + pendingPhotosPreviews.length < 3"
+                    type="button"
+                    icon="i-lucide-upload"
+                    color="primary"
+                    variant="soft"
+                    @click="triggerPhotoPicker"
+                  >
+                    Subir foto
+                  </UButton>
+
+                  <UBadge
+                    v-if="photosLoading"
+                    color="neutral"
+                    variant="subtle"
+                  >
+                    Cargando...
+                  </UBadge>
+                </div>
+
+                <div
+                  v-if="filteredPhotoList.length || pendingPhotosPreviews.length"
+                  class="grid grid-cols-3 gap-2"
+                >
+                  <!-- Uploaded photos -->
+                  <div
+                    v-for="item in filteredPhotoList"
+                    :key="`uploaded-${item.id}`"
+                    class="relative aspect-square overflow-hidden rounded-md group"
+                  >
+                    <img
+                      :src="`/api/purchases/${editingPurchaseId}/photos/${item.slot}`"
+                      :alt="`Foto ${item.slot}`"
+                      class="size-full rounded-md object-cover"
+                      loading="lazy"
+                    >
+                    <UButton
+                      class="absolute right-1 top-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                      color="error"
+                      variant="solid"
+                      icon="i-lucide-x"
+                      size="xs"
+                      @click="deletePhoto(editingPurchaseId!, item.slot)"
+                    />
+                  </div>
+
+                  <!-- Pending photo previews -->
+                  <div
+                    v-for="(pending, index) in pendingPhotosPreviews"
+                    :key="`pending-${index}`"
+                    class="relative aspect-square overflow-hidden rounded-md group border-2 border-dashed border-primary"
+                  >
+                    <img
+                      :src="pending.previewUrl"
+                      :alt="pending.file.name"
+                      class="size-full rounded-md object-cover opacity-75"
+                      loading="lazy"
+                    >
+                    <div class="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <span class="text-xs font-medium text-white">Por subir</span>
+                    </div>
+                    <UButton
+                      class="absolute right-1 top-1 opacity-100"
+                      color="error"
+                      variant="solid"
+                      icon="i-lucide-x"
+                      size="xs"
+                      @click="removePendingPhoto(index)"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sm:col-span-2 flex flex-wrap gap-2">
+              <UButton
+                type="submit"
+                icon="i-lucide-save"
+                :loading="isSubmitting"
+                :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel"
+              >
+                Guardar cambios
+              </UButton>
+              <UButton
+                type="button"
+                color="error"
+                variant="soft"
+                icon="i-lucide-trash"
+                :loading="deletingPurchase && deletingPurchaseId === editingPurchaseId"
+                @click="() => { if (editingPurchaseId) { confirmAndDelete(purchaseList.find(p => p.id === editingPurchaseId)!) } }"
+              >
+                Eliminar compra
+              </UButton>
+              <UButton
+                type="button"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-x"
+                @click="closeEditModal"
+              >
+                Cancelar
+              </UButton>
+            </div>
+          </form>
+        </div>
+      </template>
+    </UModal>
 
     <UModal v-model:open="isComparisonDialogOpen">
       <template #content>
