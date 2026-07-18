@@ -6,7 +6,8 @@ export default eventHandler(async (event) => {
   const user = await requireAdminAccess(event)
   const db = useDB()
 
-  const userId = getRouterParam(event, 'id')
+  const rawUserId = getRouterParam(event, 'id')
+  const userId = rawUserId ? decodeURIComponent(rawUserId) : ''
   if (!userId) {
     throw createError({ statusCode: 400, message: 'Missing user ID' })
   }

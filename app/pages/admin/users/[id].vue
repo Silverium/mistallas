@@ -20,6 +20,12 @@
       >
         Cargando usuario...
       </div>
+      <UAlert
+        v-else-if="userErrorMessage"
+        color="error"
+        variant="soft"
+        :title="userErrorMessage"
+      />
       <div
         v-else-if="user"
         class="space-y-6"
@@ -247,7 +253,7 @@ definePageMeta({
 
 const route = useRoute()
 const userId = route.params.id as string
-const userDataKey = `admin-user-${userId}`
+const requestFetch = useRequestFetch()
 
 interface AdminUserDetail {
   id: string
@@ -279,13 +285,29 @@ const { data: tiersData } = await useAsyncData<TierInfo[]>(
   { default: () => [] as TierInfo[] }
 )
 
-const { data: userData, pending: loading, refresh: refreshUser } = await useAsyncData<AdminUserDetail | null>(
-  userDataKey,
-  () => $fetch(`/api/admin/users/${userId}`),
-  {
-    default: () => null
+const userData = ref<AdminUserDetail | null>(null)
+const loading = ref(true)
+const userErrorMessage = ref('')
+
+async function refreshUser() {
+  loading.value = true
+  userErrorMessage.value = ''
+
+  try {
+    userData.value = await $fetch<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(userId)}`)
   }
-)
+  catch (error) {
+    userData.value = null
+    userErrorMessage.value = error instanceof Error ? error.message : 'No se pudo cargar el usuario.'
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  void refreshUser()
+})
 
 const user = computed(() => userData.value)
 const saving = ref(false)
@@ -437,7 +459,7 @@ async function confirmAndSaveChanges() {
 
   saving.value = true
   try {
-    await $fetch(`/api/admin/users/${userId}`, {
+    await requestFetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
       method: 'PATCH',
       body: {
         tier: editedTier.value,
