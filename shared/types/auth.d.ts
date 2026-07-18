@@ -2,6 +2,9 @@ declare module '#auth-utils' {
   interface User {
     id: string
     login: string
+    email?: string
+    avatarUrl?: string
+    loginProvider?: 'github' | 'google' | 'instagram'
     role: 'user' | 'admin'
     tier: 'free' | 'premium' | 'enterprise'
   }

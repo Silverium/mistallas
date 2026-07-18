@@ -65,6 +65,24 @@ const items = computed(() => {
     ]
   ] satisfies DropdownMenuItem[][]
 })
+
+const userDisplayName = computed(() => user.value?.login || user.value?.email || 'Usuario')
+
+const userAvatar = computed(() => {
+  if (!user.value) {
+    return undefined
+  }
+
+  if (user.value.avatarUrl) {
+    return user.value.avatarUrl
+  }
+
+  if (user.value.loginProvider === 'github' && user.value.login) {
+    return `https://github.com/${user.value.login}.png`
+  }
+
+  return undefined
+})
 </script>
 
 <template>
@@ -100,7 +118,8 @@ const items = computed(() => {
             :items="[
               [
                 { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
-                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
+                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true },
+                // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true }
               ]
             ]"
           >
@@ -164,11 +183,11 @@ const items = computed(() => {
                 trailing-icon="i-lucide-chevron-down"
               >
                 <UAvatar
-                  :src="`https://github.com/${user.login}.png`"
-                  :alt="user.login"
+                  :src="userAvatar"
+                  :alt="userDisplayName"
                   size="3xs"
                 />
-                {{ user.login }}
+                {{ userDisplayName }}
               </UButton>
             </UDropdownMenu>
           </div>

@@ -182,7 +182,7 @@ interface AdminUser {
   id: string
   tier: 'free' | 'premium' | 'enterprise'
   role: 'user' | 'admin'
-  loginProvider: 'github' | 'google'
+  loginProvider: 'github' | 'google' | 'instagram'
   purchaseCount: number
   createdAt: string
   updatedAt: string

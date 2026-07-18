@@ -7,7 +7,7 @@ export const users = sqliteTable('users', {
   stripeCustomerId: text('stripe_customer_id'),
   stripeSubscriptionId: text('stripe_subscription_id'),
   subscriptionStatus: text('subscription_status', { enum: ['active', 'cancelled', 'past_due'] }),
-  loginProvider: text('login_provider', { enum: ['github', 'google'] }).notNull(),
+  loginProvider: text('login_provider', { enum: ['github', 'google', 'instagram'] }).notNull(),
   deletedAt: integer('deleted_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()

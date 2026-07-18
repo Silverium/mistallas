@@ -34,11 +34,23 @@ Create a [GitHub Oauth Application](https://github.com/settings/applications/new
 - Homepage url: `http://localhost:3000`
 - Callback url: `http://localhost:3000/api/auth/github`
 
+Create a Google OAuth app with callback URL:
+- `http://localhost:3000/api/auth/google`
+
+Create an Instagram app with callback URL:
+- `http://localhost:3000/api/auth/instagram`
+
+> Note: Instagram Login currently targets professional accounts (Business or Creator).
+
 Add the variables in the `.env` file:
 
 ```bash
 NUXT_OAUTH_GITHUB_CLIENT_ID="my-github-oauth-app-id"
 NUXT_OAUTH_GITHUB_CLIENT_SECRET="my-github-oauth-app-secret"
+NUXT_OAUTH_GOOGLE_CLIENT_ID="my-google-oauth-client-id"
+NUXT_OAUTH_GOOGLE_CLIENT_SECRET="my-google-oauth-client-secret"
+NUXT_OAUTH_INSTAGRAM_CLIENT_ID="my-instagram-oauth-client-id"
+NUXT_OAUTH_INSTAGRAM_CLIENT_SECRET="my-instagram-oauth-client-secret"
 ```
 
 To create sealed sessions, you also need to add `NUXT_SESSION_PASSWORD` in the `.env` with at least 32 characters:

@@ -58,8 +58,11 @@ export default defineOAuthGoogleEventHandler({
         user: {
           ...user,
           id: userId,
+          login: user.name || user.email,
+          loginProvider: 'google',
           tier: dbUser.tier,
-          role: dbUser.role
+          role: dbUser.role,
+          avatarUrl: user.picture
         }
       })
       return sendRedirect(event, '/purchases')
