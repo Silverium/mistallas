@@ -338,32 +338,46 @@ const createDefaultProfile = (): UserProfile => ({
 
 const createDefaultTiers = (): TierInfo[] => []
 
-const { data: accountData, pending, error: accountError, refresh } = await useAsyncData<AccountResponse>(
-  'account-data',
-  async () => {
+const accountData = ref<AccountResponse>({
+  profile: createDefaultProfile(),
+  tiers: createDefaultTiers()
+})
+const loading = ref(true)
+const hasFetched = ref(false)
+const accountError = ref('')
+
+const refresh = async () => {
+  loading.value = true
+  accountError.value = ''
+
+  try {
     const [profileResponse, tiersResponse] = await Promise.all([
       $fetch<UserProfile>('/api/account/profile'),
       $fetch<{ tiers: TierInfo[] }>('/api/account/tiers')
     ])
 
-    return {
+    accountData.value = {
       profile: profileResponse,
       tiers: tiersResponse.tiers
     }
-  },
-  {
-    default: () => ({
-      profile: createDefaultProfile(),
-      tiers: createDefaultTiers()
-    })
   }
-)
+  catch (error) {
+    accountError.value = getSpanishApiErrorMessage(error) ?? 'No se pudo cargar la información de tu cuenta.'
+  }
+  finally {
+    loading.value = false
+    hasFetched.value = true
+  }
+}
+
+onMounted(() => {
+  void refresh()
+})
 
 const profile = computed(() => accountData.value?.profile ?? createDefaultProfile())
 const tiers = computed(() => accountData.value?.tiers ?? createDefaultTiers())
-const loading = computed(() => pending.value)
 const pageErrorMessage = computed(() => {
-  if (!accountError.value) {
+  if (!hasFetched.value || !accountError.value) {
     return ''
   }
 
