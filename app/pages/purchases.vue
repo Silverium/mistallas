@@ -1033,10 +1033,17 @@ const diffRows = computed<RowDiff[]>(() => {
             color="neutral"
             variant="soft"
             icon="i-lucide-check"
-            title="No hay cambios de medidas entre la compra y tu estado actual."
+            title="No hay cambios de medidas corporales entre el día de la compra y tus medidas actuales."
           />
 
-          <div class="flex justify-end">
+          <div class="flex justify-between w-full">
+            <UButton
+              color="success"
+              variant="link"
+              to="/measurements"
+            >
+              Actualizar medidas
+            </UButton>
             <UButton
               color="neutral"
               variant="soft"
