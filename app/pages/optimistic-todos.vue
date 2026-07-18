@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { todosQuery } from '~/queries/todos'
+import type { Todo } from '~~/shared/types/todo'
 
 definePageMeta({
   middleware: 'auth'
@@ -9,6 +10,7 @@ const newTodo = ref('')
 const toast = useToast()
 const { user } = useUserSession()
 const queryCache = useQueryCache()
+const requestFetch = useRequestFetch()
 
 const { loggedIn } = useUserSession()
 
@@ -21,13 +23,13 @@ const { mutate: addTodo } = useMutation({
   mutation: (title: string) => {
     if (!title.trim()) throw new Error('Title is required')
 
-    return $fetch('/api/todos', {
+    return requestFetch<Todo>('/api/todos', {
       method: 'POST',
       body: {
         title,
         completed: 0
       }
-    }) as Promise<Todo>
+    })
   },
 
   onMutate(title) {
@@ -99,7 +101,7 @@ const { mutate: addTodo } = useMutation({
 
 const { mutate: toggleTodo } = useMutation({
   mutation: (todo: Todo) =>
-    $fetch(`/api/todos/${todo.id}`, {
+    requestFetch<Todo>(`/api/todos/${todo.id}`, {
       method: 'PATCH',
       body: {
         completed: Number(!todo.completed)
@@ -143,7 +145,7 @@ const { mutate: toggleTodo } = useMutation({
 })
 
 const { mutate: deleteTodo } = useMutation({
-  mutation: (todo: Todo) => $fetch(`/api/todos/${todo.id}`, { method: 'DELETE' }),
+  mutation: (todo: Todo) => requestFetch(`/api/todos/${todo.id}`, { method: 'DELETE' }) as Promise<void>,
 
   onMutate(todo) {
     const oldTodos = queryCache.getQueryData(todosQuery.key) || []

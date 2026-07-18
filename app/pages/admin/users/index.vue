@@ -199,6 +199,7 @@ interface AdminUsersResponse {
 const currentPage = ref(1)
 const searchQuery = ref('')
 const selectedTier = ref<'all' | 'free' | 'premium' | 'enterprise'>('all')
+const requestFetch = useRequestFetch()
 
 const tierOptions = [
   { label: 'Todos los planes', value: 'all' },
@@ -228,7 +229,7 @@ const usersQuery = computed(() => {
 
 const { data, pending: loading, refresh } = await useAsyncData<AdminUsersResponse>(
   'admin-users-list',
-  () => $fetch('/api/admin/users', { query: usersQuery.value }),
+  () => requestFetch('/api/admin/users', { query: usersQuery.value }),
   {
     watch: [usersQuery],
     default: () => ({
@@ -282,7 +283,7 @@ async function deleteUser(userId: string) {
   }
 
   try {
-    await $fetch(`/api/admin/users/${userId}`, { method: 'DELETE' })
+    await requestFetch(`/api/admin/users/${userId}`, { method: 'DELETE' })
     await refresh()
     await refreshNuxtData(`admin-user-${userId}`)
   }

@@ -52,6 +52,7 @@ type PurchasePhoto = {
 
 const toast = useToast()
 const queryCache = useQueryCache()
+const requestFetch = useRequestFetch()
 
 const form = reactive({
   brand: '',
@@ -99,7 +100,7 @@ const { data: purchases } = useQuery({
 })
 
 const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
-  mutation: () => $fetch('/api/purchases', {
+  mutation: () => requestFetch('/api/purchases', {
     method: 'POST',
     body: {
       brand: form.brand,
@@ -139,7 +140,7 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
 })
 
 const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
-  mutation: (purchaseId: number) => $fetch(`/api/purchases/${purchaseId}`, {
+  mutation: (purchaseId: number) => requestFetch(`/api/purchases/${purchaseId}`, {
     method: 'PATCH',
     body: {
       brand: form.brand,
@@ -179,7 +180,7 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
 })
 
 const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
-  mutation: (purchase: Purchase) => $fetch(`/api/purchases/${purchase.id}`, {
+  mutation: (purchase: Purchase) => requestFetch(`/api/purchases/${purchase.id}`, {
     method: 'DELETE'
   }),
   async onSuccess(_deleted, purchase) {
@@ -209,7 +210,7 @@ const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
 })
 
 const { mutate: comparePurchase, isLoading: comparing } = useMutation({
-  mutation: (purchase: Purchase) => $fetch<ComparisonResult>(`/api/purchases/${purchase.id}/compare`),
+  mutation: (purchase: Purchase) => requestFetch<ComparisonResult>(`/api/purchases/${purchase.id}/compare`),
   onSuccess(data, purchase) {
     selectedComparison.value = data
     selectedPurchase.value = purchase
@@ -226,7 +227,7 @@ const { data: photoList, refresh: refreshPhotos, isLoading: photosLoading } = us
       return [] as PurchasePhoto[]
     }
 
-    return $fetch<PurchasePhoto[]>(`/api/purchases/${selectedPhotoPurchaseId.value}/photos`)
+    return requestFetch<PurchasePhoto[]>(`/api/purchases/${selectedPhotoPurchaseId.value}/photos`)
   },
   enabled: () => !!selectedPhotoPurchaseId.value
 })
@@ -279,7 +280,7 @@ const uploadPhotoFile = async (purchaseId: number, file: File) => {
     const compressedBlob = await compressImage(file)
     const fileBase64 = await blobToBase64(compressedBlob)
 
-    await $fetch(`/api/purchases/${purchaseId}/photos`, {
+    await requestFetch(`/api/purchases/${purchaseId}/photos`, {
       method: 'POST',
       body: {
         fileBase64,
@@ -343,7 +344,7 @@ const onPhotoInputChange = async (event: Event) => {
       const compressedBlob = await compressImage(file)
       const fileBase64 = await blobToBase64(compressedBlob)
 
-      await $fetch(`/api/purchases/${purchaseId}/photos`, {
+      await requestFetch(`/api/purchases/${purchaseId}/photos`, {
         method: 'POST',
         body: {
           fileBase64,
@@ -375,7 +376,7 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
   if (!confirm('¿Eliminar esta foto?')) return
 
   try {
-    await $fetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
+    await requestFetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
       method: 'DELETE'
     })
     await queryCache.invalidateQueries(purchasesQuery)

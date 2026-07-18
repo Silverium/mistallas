@@ -1,4 +1,5 @@
 import { defineQueryOptions } from '@pinia/colada'
+import type { Todo } from '~~/shared/types/todo'
 
 export const todosQuery = defineQueryOptions({
   key: ['todos'],

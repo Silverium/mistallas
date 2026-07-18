@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { todosQuery } from '~/queries/todos'
+import type { Todo } from '~~/shared/types/todo'
 
 definePageMeta({
   middleware: 'auth'
 })
+
 const newTodo = ref('')
 const newTodoInput = useTemplateRef('new-todo')
 
 const toast = useToast()
 const queryCache = useQueryCache()
+const requestFetch = useRequestFetch()
 
 const { loggedIn } = useUserSession()
 
@@ -21,7 +24,7 @@ const { mutate: addTodo, isLoading: loading } = useMutation({
   mutation: (title: string) => {
     if (!title.trim()) throw new Error('El título es obligatorio')
 
-    return $fetch('/api/todos', {
+    return requestFetch<Todo>('/api/todos', {
       method: 'POST',
       body: {
         title,
@@ -62,7 +65,7 @@ const { mutate: addTodo, isLoading: loading } = useMutation({
 
 const { mutate: toggleTodo } = useMutation({
   mutation: (todo: Todo) =>
-    $fetch(`/api/todos/${todo.id}`, {
+    requestFetch<Todo>(`/api/todos/${todo.id}`, {
       method: 'PATCH',
       body: {
         completed: Number(!todo.completed)
@@ -76,7 +79,7 @@ const { mutate: toggleTodo } = useMutation({
 
 const { mutate: deleteTodo } = useMutation({
   mutation: (todo: Todo) =>
-    $fetch(`/api/todos/${todo.id}`, { method: 'DELETE' }),
+    requestFetch(`/api/todos/${todo.id}`, { method: 'DELETE' }) as Promise<void>,
 
   async onSuccess(_result, todo) {
     await queryCache.invalidateQueries(todosQuery)

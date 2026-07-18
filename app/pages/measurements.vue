@@ -15,6 +15,7 @@ type Measurement = { [K in MeasurementFieldKey]: number | null } & {
 
 const toast = useToast()
 const queryCache = useQueryCache()
+const requestFetch = useRequestFetch()
 
 const form = reactive({
   weightKg: '',
@@ -58,7 +59,7 @@ const { data: measurements } = useQuery({
 })
 
 const { mutate: addMeasurement, isLoading: adding } = useMutation({
-  mutation: () => $fetch('/api/measurements', {
+  mutation: () => requestFetch('/api/measurements', {
     method: 'POST',
     body: {
       weightKg: Number(form.weightKg),
@@ -93,7 +94,7 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
 })
 
 const { mutate: removeMeasurement } = useMutation({
-  mutation: (id: number) => $fetch(`/api/measurements/${id}`, { method: 'DELETE' }),
+  mutation: (id: number) => requestFetch(`/api/measurements/${id}`, { method: 'DELETE' }),
   async onSuccess() {
     await queryCache.invalidateQueries(measurementsQuery)
     toast.add({ title: 'Medida eliminada.' })
@@ -114,7 +115,7 @@ const { mutate: uploadMeasurements, isLoading: uploading } = useMutation({
       throw new Error('El JSON debe ser una colección de medidas.')
     }
 
-    return $fetch<{ uploaded: number }>('/api/measurements/upload', {
+    return requestFetch<{ uploaded: number }>('/api/measurements/upload', {
       method: 'POST',
       body: {
         measurements: parsed

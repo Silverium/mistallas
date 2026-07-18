@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm'
+import type { Todo } from '~~/shared/types/todo'
 
 export default eventHandler(async (event) => {
   const { user } = await requireUserSession(event)

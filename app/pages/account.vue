@@ -328,6 +328,7 @@ interface AccountResponse {
 }
 
 const route = useRoute()
+const requestFetch = useRequestFetch()
 
 const createDefaultProfile = (): UserProfile => ({
   tier: 'free',
@@ -352,8 +353,8 @@ const refresh = async () => {
 
   try {
     const [profileResponse, tiersResponse] = await Promise.all([
-      $fetch<UserProfile>('/api/account/profile'),
-      $fetch<{ tiers: TierInfo[] }>('/api/account/tiers')
+      requestFetch<UserProfile>('/api/account/profile'),
+      requestFetch<{ tiers: TierInfo[] }>('/api/account/tiers')
     ])
 
     accountData.value = {
@@ -567,7 +568,7 @@ async function upgrade(tierName: Exclude<Tier, 'free'>) {
       enterprise: 'price_0987654321'
     }
 
-    const response = await $fetch<{ redirectUrl: string }>('/api/account/upgrade', {
+    const response = await requestFetch<{ redirectUrl: string }>('/api/account/upgrade', {
       method: 'POST',
       body: {
         targetTier: tierName,
@@ -598,7 +599,7 @@ async function downgrade(tierName: 'free' | 'premium') {
   pendingTier.value = tierName
   actionError.value = ''
   try {
-    await $fetch('/api/account/downgrade', {
+    await requestFetch('/api/account/downgrade', {
       method: 'POST',
       body: { targetTier: tierName }
     })
