@@ -117,6 +117,7 @@ const userAvatar = computed(() => {
             v-if="!loggedIn"
             :items="[
               [
+                // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
                 { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
                 { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true },
                 // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true }

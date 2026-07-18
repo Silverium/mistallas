@@ -4,7 +4,7 @@ declare module '#auth-utils' {
     login: string
     email?: string
     avatarUrl?: string
-    loginProvider?: 'github' | 'google' | 'instagram'
+    loginProvider?: 'github' | 'google' | 'instagram' | 'apple'
     role: 'user' | 'admin'
     tier: 'free' | 'premium' | 'enterprise'
   }

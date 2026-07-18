@@ -42,6 +42,9 @@ Create an Instagram app with callback URL:
 
 > Note: Instagram Login currently targets professional accounts (Business or Creator).
 
+Create an Apple Sign In app/service with callback URL:
+- `http://localhost:3000/api/auth/apple`
+
 Add the variables in the `.env` file:
 
 ```bash
@@ -51,6 +54,10 @@ NUXT_OAUTH_GOOGLE_CLIENT_ID="my-google-oauth-client-id"
 NUXT_OAUTH_GOOGLE_CLIENT_SECRET="my-google-oauth-client-secret"
 NUXT_OAUTH_INSTAGRAM_CLIENT_ID="my-instagram-oauth-client-id"
 NUXT_OAUTH_INSTAGRAM_CLIENT_SECRET="my-instagram-oauth-client-secret"
+NUXT_OAUTH_APPLE_CLIENT_ID="my-apple-service-id"
+NUXT_OAUTH_APPLE_TEAM_ID="my-apple-team-id"
+NUXT_OAUTH_APPLE_KEY_ID="my-apple-key-id"
+NUXT_OAUTH_APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 ```
 
 To create sealed sessions, you also need to add `NUXT_SESSION_PASSWORD` in the `.env` with at least 32 characters:
