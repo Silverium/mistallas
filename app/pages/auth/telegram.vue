@@ -6,6 +6,13 @@ interface TelegramAuthConfig {
 }
 
 const requestFetch = useRequestFetch()
+const { loggedIn, fetch: fetchUserSession } = useUserSession()
+
+await fetchUserSession()
+
+if (loggedIn.value) {
+  await navigateTo('/purchases', { replace: true })
+}
 
 const { data, pending, error } = await useAsyncData<TelegramAuthConfig>(
   'telegram-auth-config',
@@ -70,6 +77,7 @@ async function handleTelegramAuth(user: TelegramWidgetUser) {
       }
     })
 
+    await fetchUserSession()
     await navigateTo(response.redirectTo || '/purchases')
   }
   catch (err) {
