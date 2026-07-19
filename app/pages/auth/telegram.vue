@@ -49,7 +49,6 @@ function mountTelegramWidget() {
   script.setAttribute('data-onauth', 'onTelegramAuth(user)')
   script.setAttribute('data-request-access', 'write')
 
-	console.log(`%cconfig ${config?.origin}`, 'background-color: gold;', config);
   container.appendChild(script)
 }
 
@@ -74,8 +73,9 @@ async function handleTelegramAuth(user: TelegramWidgetUser) {
     await navigateTo(response.redirectTo || '/purchases')
   }
   catch (err) {
-    const message = err instanceof Error
-      ? err.message
+    const statusCode = (err as { statusCode?: number })?.statusCode
+    const message = statusCode === 404
+      ? 'Servicio de autenticación no disponible. Inténtalo de nuevo en unos segundos.'
       : 'No se pudo iniciar sesión con Telegram'
     authRuntimeError.value = message
     isSigningIn.value = false
