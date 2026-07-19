@@ -259,7 +259,7 @@ interface AdminUserDetail {
   id: string
   tier: 'free' | 'premium' | 'enterprise'
   role: 'user' | 'admin'
-  loginProvider: 'github' | 'google' | 'instagram' | 'apple'
+  loginProvider: 'github' | 'google' | 'instagram' | 'apple' | 'telegram'
   createdAt: string
   updatedAt: string
   purchaseCount: number

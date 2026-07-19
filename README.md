@@ -45,6 +45,10 @@ Create an Instagram app with callback URL:
 Create an Apple Sign In app/service with callback URL:
 - `http://localhost:3000/api/auth/apple`
 
+Create a Telegram bot in @BotFather and configure legacy Login Widget:
+- Run `/setdomain` and set your app origin (for local dev, use a public HTTPS tunnel origin)
+- Use callback URL: `http://localhost:3000/api/auth/telegram` (or your public tunnel callback)
+
 Add the variables in the `.env` file:
 
 ```bash
@@ -58,6 +62,10 @@ NUXT_OAUTH_APPLE_CLIENT_ID="my-apple-service-id"
 NUXT_OAUTH_APPLE_TEAM_ID="my-apple-team-id"
 NUXT_OAUTH_APPLE_KEY_ID="my-apple-key-id"
 NUXT_OAUTH_APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+NUXT_OAUTH_TELEGRAM_BOT_USERNAME="my_bot_username"
+NUXT_OAUTH_TELEGRAM_BOT_TOKEN="123456789:AA..."
+NUXT_OAUTH_TELEGRAM_REDIRECT_URL="http://localhost:3000/api/auth/telegram"
+NUXT_OAUTH_TELEGRAM_ORIGIN="http://localhost:3000" # optional override; should match /setdomain origin
 ```
 
 To create sealed sessions, you also need to add `NUXT_SESSION_PASSWORD` in the `.env` with at least 32 characters:
