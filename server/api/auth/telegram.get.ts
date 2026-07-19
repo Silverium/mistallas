@@ -95,6 +95,7 @@ function renderTelegramWidgetPage(botUsername: string, callbackUrl: string, orig
   const escapedUsername = escapeHtml(botUsername)
   const escapedCallback = escapeHtml(callbackUrl)
   const escapedOrigin = escapeHtml(origin)
+  console.debug('[OAuth] Rendering Telegram login widget page', { botUsername, callbackUrl, escapedOrigin })
 
   return `<!doctype html>
 <html lang="en">
@@ -111,8 +112,7 @@ function renderTelegramWidgetPage(botUsername: string, callbackUrl: string, orig
   </head>
   <body>
     <div class="card">
-      <h2>Sign in with Telegram</h2>
-      <p>Domain configured in BotFather should match: <code>${escapedOrigin}</code></p>
+      <h2>Inicia sesión con Telegram</h2>
       <script async src="https://telegram.org/js/telegram-widget.js?24"
         data-telegram-login="${escapedUsername}"
         data-size="large"
