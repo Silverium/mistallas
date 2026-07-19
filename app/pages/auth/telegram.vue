@@ -13,8 +13,21 @@ const { data, pending, error } = await useAsyncData<TelegramAuthConfig>(
 )
 
 const widgetContainer = ref<HTMLElement | null>(null)
+const isSigningIn = ref(false)
+const authRuntimeError = ref('')
+
+type TelegramWidgetUser = {
+  id: number
+  first_name?: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+  auth_date: number
+  hash: string
+}
 
 function mountTelegramWidget() {
+
   if (!import.meta.client) {
     return
   }
@@ -33,10 +46,40 @@ function mountTelegramWidget() {
   script.src = 'https://telegram.org/js/telegram-widget.js?24'
   script.setAttribute('data-telegram-login', config.botUsername)
   script.setAttribute('data-size', 'large')
-  script.setAttribute('data-auth-url', config.callbackUrl)
+  script.setAttribute('data-onauth', 'onTelegramAuth(user)')
   script.setAttribute('data-request-access', 'write')
 
+	console.log(`%cconfig ${config?.origin}`, 'background-color: gold;', config);
   container.appendChild(script)
+}
+
+async function handleTelegramAuth(user: TelegramWidgetUser) {
+  isSigningIn.value = true
+  authRuntimeError.value = ''
+
+  try {
+    const response = await requestFetch<{ success: boolean, redirectTo?: string }>('/api/auth/telegram', {
+      method: 'POST',
+      body: {
+        id: String(user.id),
+        first_name: user.first_name,
+        last_name: user.last_name,
+        username: user.username,
+        photo_url: user.photo_url,
+        auth_date: String(user.auth_date),
+        hash: user.hash
+      }
+    })
+
+    await navigateTo(response.redirectTo || '/purchases')
+  }
+  catch (err) {
+    const message = err instanceof Error
+      ? err.message
+      : 'No se pudo iniciar sesión con Telegram'
+    authRuntimeError.value = message
+    isSigningIn.value = false
+  }
 }
 
 watch(
@@ -48,7 +91,18 @@ watch(
 )
 
 onMounted(() => {
+  if (import.meta.client) {
+    // Telegram widget expects a global callback name from data-onauth
+    ;(window as unknown as { onTelegramAuth?: (user: TelegramWidgetUser) => void }).onTelegramAuth = handleTelegramAuth
+  }
+
   mountTelegramWidget()
+})
+
+onBeforeUnmount(() => {
+  if (import.meta.client) {
+    delete (window as unknown as { onTelegramAuth?: (user: TelegramWidgetUser) => void }).onTelegramAuth
+  }
 })
 
 const errorMessage = computed(() => {
@@ -89,6 +143,13 @@ const errorMessage = computed(() => {
         :title="errorMessage"
       />
 
+      <UAlert
+        v-else-if="authRuntimeError"
+        color="error"
+        variant="soft"
+        :title="authRuntimeError"
+      />
+
       <div
         v-else
         class="space-y-4"
@@ -111,10 +172,10 @@ const errorMessage = computed(() => {
         />
 
         <p
-          v-if="data?.origin"
-          class="text-xs text-muted text-center"
+          v-if="isSigningIn"
+          class="text-sm text-center text-muted"
         >
-          Origen configurado: <code>{{ data.origin }}</code>
+          Verificando sesión de Telegram...
         </p>
       </div>
     </UCard>

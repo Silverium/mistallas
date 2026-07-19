@@ -64,7 +64,10 @@ export default eventHandler(async (event) => {
       })
     }
 
-    const query = getQuery<TelegramLegacyAuthQuery>(event)
+    const method = getMethod(event)
+    const query = method === 'POST'
+      ? await readBody<TelegramLegacyAuthQuery>(event)
+      : getQuery<TelegramLegacyAuthQuery>(event)
 
     // Initial request should be served by /auth/telegram page
     if (!query.id || !query.hash) {
@@ -132,6 +135,13 @@ export default eventHandler(async (event) => {
         loginProvider: 'telegram'
       }
     })
+
+    if (method === 'POST') {
+      return {
+        success: true,
+        redirectTo: '/purchases'
+      }
+    }
 
     return sendRedirect(event, '/purchases')
   }
