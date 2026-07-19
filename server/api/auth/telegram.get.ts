@@ -15,44 +15,6 @@ type TelegramLegacyAuthQuery = {
   hash?: string
 }
 
-function normalizeBotUsername(value: string) {
-  return value.trim().replace(/^@/, '')
-}
-
-function isValidBotUsername(value: string) {
-  return /^[A-Za-z0-9_]{5,}$/.test(value)
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-function resolveCallbackUrl(event: Parameters<typeof getRequestURL>[0]) {
-  if (process.env.NUXT_OAUTH_TELEGRAM_REDIRECT_URL) {
-    return process.env.NUXT_OAUTH_TELEGRAM_REDIRECT_URL
-  }
-
-  return getRequestURL(event).toString()
-}
-
-function resolveOrigin(event: Parameters<typeof getRequestURL>[0], callbackUrl: string) {
-  if (process.env.NUXT_OAUTH_TELEGRAM_ORIGIN) {
-    return process.env.NUXT_OAUTH_TELEGRAM_ORIGIN
-  }
-
-  try {
-    return new URL(callbackUrl).origin
-  }
-  catch {
-    return getRequestURL(event).origin
-  }
-}
-
 function getDataCheckString(query: TelegramLegacyAuthQuery) {
   return Object.entries(query)
     .filter(([key, value]) => key !== 'hash' && typeof value === 'string' && value.length > 0)
@@ -91,45 +53,9 @@ function verifyTelegramAuth(query: TelegramLegacyAuthQuery, botToken: string) {
   return timingSafeEqual(expected, actual)
 }
 
-function renderTelegramWidgetPage(botUsername: string, callbackUrl: string, origin: string) {
-  const escapedUsername = escapeHtml(botUsername)
-  const escapedCallback = escapeHtml(callbackUrl)
-  const escapedOrigin = escapeHtml(origin)
-  console.debug('[OAuth] Rendering Telegram login widget page', { botUsername, callbackUrl, escapedOrigin })
-
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Telegram Login</title>
-    <style>
-      body { font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #f7f7f7; }
-      .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); text-align: center; max-width: 520px; }
-      p { color: #555; margin: 8px 0 16px; }
-      code { font-size: 12px; background: #f1f3f5; padding: 2px 6px; border-radius: 6px; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h2>Inicia sesión con Telegram</h2>
-      <script async src="https://telegram.org/js/telegram-widget.js?24"
-        data-telegram-login="${escapedUsername}"
-        data-size="large"
-        data-auth-url="${escapedCallback}"
-        data-request-access="write"></script>
-    </div>
-  </body>
-</html>`
-}
-
 export default eventHandler(async (event) => {
   try {
     const botToken = process.env.NUXT_OAUTH_TELEGRAM_BOT_TOKEN
-    const botUsername = process.env.NUXT_OAUTH_TELEGRAM_BOT_USERNAME
-    const normalizedBotUsername = botUsername ? normalizeBotUsername(botUsername) : ''
-    const callbackUrl = resolveCallbackUrl(event)
-    const origin = resolveOrigin(event, callbackUrl)
 
     if (!botToken) {
       throw createError({
@@ -140,24 +66,9 @@ export default eventHandler(async (event) => {
 
     const query = getQuery<TelegramLegacyAuthQuery>(event)
 
-    // No Telegram callback yet -> render legacy widget page
+    // Initial request should be served by /auth/telegram page
     if (!query.id || !query.hash) {
-      if (!normalizedBotUsername) {
-        throw createError({
-          statusCode: 500,
-          message: 'Missing Telegram bot username for legacy login widget'
-        })
-      }
-
-      if (!isValidBotUsername(normalizedBotUsername)) {
-        throw createError({
-          statusCode: 500,
-          message: 'Invalid Telegram bot username. Use only the bot username (without @), e.g. my_bot_name'
-        })
-      }
-
-      setResponseHeader(event, 'content-type', 'text/html; charset=utf-8')
-      return renderTelegramWidgetPage(normalizedBotUsername, callbackUrl, origin)
+      return sendRedirect(event, '/auth/telegram')
     }
 
     if (!verifyTelegramAuth(query, botToken)) {
