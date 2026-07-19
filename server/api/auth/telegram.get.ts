@@ -15,6 +15,14 @@ type TelegramLegacyAuthQuery = {
   hash?: string
 }
 
+function normalizeBotUsername(value: string) {
+  return value.trim().replace(/^@/, '')
+}
+
+function isValidBotUsername(value: string) {
+  return /^[A-Za-z0-9_]{5,}$/.test(value)
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -119,6 +127,7 @@ export default eventHandler(async (event) => {
   try {
     const botToken = process.env.NUXT_OAUTH_TELEGRAM_BOT_TOKEN
     const botUsername = process.env.NUXT_OAUTH_TELEGRAM_BOT_USERNAME
+    const normalizedBotUsername = botUsername ? normalizeBotUsername(botUsername) : ''
     const callbackUrl = resolveCallbackUrl(event)
     const origin = resolveOrigin(event, callbackUrl)
 
@@ -133,15 +142,22 @@ export default eventHandler(async (event) => {
 
     // No Telegram callback yet -> render legacy widget page
     if (!query.id || !query.hash) {
-      if (!botUsername) {
+      if (!normalizedBotUsername) {
         throw createError({
           statusCode: 500,
           message: 'Missing Telegram bot username for legacy login widget'
         })
       }
 
+      if (!isValidBotUsername(normalizedBotUsername)) {
+        throw createError({
+          statusCode: 500,
+          message: 'Invalid Telegram bot username. Use only the bot username (without @), e.g. my_bot_name'
+        })
+      }
+
       setResponseHeader(event, 'content-type', 'text/html; charset=utf-8')
-      return renderTelegramWidgetPage(botUsername, callbackUrl, origin)
+      return renderTelegramWidgetPage(normalizedBotUsername, callbackUrl, origin)
     }
 
     if (!verifyTelegramAuth(query, botToken)) {
