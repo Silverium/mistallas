@@ -26,6 +26,12 @@ type Purchase = {
 type MeasurementFieldKey = typeof measurementSpecs[number]['key']
 type MeasurementSnapshot = Partial<Record<MeasurementFieldKey, number | null>>
 
+type Measurement = {
+  id: number
+  recordedAt: string | Date
+  [key: string]: unknown
+}
+
 type ComparisonResult = {
   snapshotAtPurchase?: MeasurementSnapshot
   currentMeasurement?: MeasurementSnapshot
@@ -40,6 +46,7 @@ type ComparisonResult = {
     }
   }
   error?: string
+  availableMeasurements?: Measurement[]
 }
 
 type PurchasePhoto = {
@@ -255,6 +262,27 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
       error: getSpanishApiErrorMessage(err) ?? 'No se pudo generar la comparación.'
     }
     selectedPurchase.value = purchase
+  }
+})
+
+const { mutate: linkMeasurementToPurchase, isLoading: linkingMeasurement } = useMutation({
+  mutation: (payload: { purchaseId: number; measurementId: number }) =>
+    requestFetch<{ success: boolean; snapshot: MeasurementSnapshot }>(
+      `/api/purchases/${payload.purchaseId}/link-measurement`,
+      {
+        method: 'POST',
+        body: { measurementId: payload.measurementId }
+      }
+    ),
+  async onSuccess(data, payload) {
+    if (selectedPurchase.value?.id === payload.purchaseId) {
+      // Refresh the comparison after linking
+      await comparePurchase(selectedPurchase.value)
+    }
+    toast.add({ title: 'Medida vinculada correctamente.' })
+  },
+  onError() {
+    toast.add({ title: 'No se pudo vincular la medida.', color: 'error' })
   }
 })
 
@@ -1078,13 +1106,38 @@ const diffRows = computed<RowDiff[]>(() => {
 
           <template v-if="!selectedComparison.error">
             <UAlert
-              v-if="!selectedComparison.snapshotAtPurchase"
+              v-if="!selectedComparison.snapshotAtPurchase && !selectedComparison.availableMeasurements?.length"
               color="neutral"
               variant="soft"
               icon="i-lucide-info"
               title="No hay medidas registradas para el día de la compra."
               description="Registra medidas regulares para comparar cómo ha cambiado tu cuerpo después de cada compra."
             />
+
+            <div v-else-if="!selectedComparison.snapshotAtPurchase && selectedComparison.availableMeasurements?.length" class="space-y-3">
+              <UAlert
+                color="info"
+                variant="soft"
+                icon="i-lucide-info"
+                title="Vincula una medida a esta compra"
+                description="Selecciona una medida para asociarla al día de la compra y comparar cómo ha cambiado tu cuerpo."
+              />
+              <div class="space-y-2">
+                <p class="text-sm font-medium">Medidas disponibles:</p>
+                <div class="space-y-2 max-h-60 overflow-y-auto">
+                  <UButton
+                    v-for="measurement in selectedComparison.availableMeasurements"
+                    :key="measurement.id"
+                    variant="soft"
+                    class="w-full justify-start"
+                    :loading="linkingMeasurement"
+                    @click="linkMeasurementToPurchase({ purchaseId: selectedPurchase!.id, measurementId: measurement.id })"
+                  >
+                    {{ new Date(measurement.recordedAt).toLocaleDateString() }} - {{ measurement.weightKg }} kg
+                  </UButton>
+                </div>
+              </div>
+            </div>
 
             <div
               v-else-if="diffRows.length"

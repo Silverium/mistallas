@@ -51,15 +51,23 @@ export default eventHandler(async (event) => {
     eq(tables.purchaseMeasurementSnapshots.userId, user.id)
   )).get()
 
-  if (!snapshot) {
-    throw createError({
-      statusCode: 404,
-      message: 'La compra registrada no tiene unas medidas corporales asociadas. Actualiza tus medidas corporales para que podamos hacer la comparación.'
-    })
-  }
-
   const currentRows = await useDB().select().from(tables.userMeasurements).where(eq(tables.userMeasurements.userId, user.id)).all()
   const current = currentRows.sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())[0] ?? null
+
+  if (!snapshot) {
+    return {
+      purchase,
+      snapshotAtPurchase: null,
+      currentMeasurement: current ? decodeMeasurement(current) : null,
+      comparison: null,
+      highlights: null,
+      availableMeasurements: currentRows.map(m => ({
+        id: m.id,
+        recordedAt: m.recordedAt,
+        ...decodeMeasurement(m)
+      }))
+    }
+  }
 
   if (!current) {
     throw createError({
@@ -87,6 +95,7 @@ export default eventHandler(async (event) => {
     comparison,
     highlights: {
       weight: weightHighlight
-    }
+    },
+    availableMeasurements: []
   }
 })
