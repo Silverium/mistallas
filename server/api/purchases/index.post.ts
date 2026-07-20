@@ -38,13 +38,6 @@ export default eventHandler(async (event) => {
     measurement = allMeasurements.sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())[0] ?? null
   }
 
-  if (!measurement) {
-    throw createError({
-      statusCode: 400,
-      message: 'A measurement is required before logging a purchase.'
-    })
-  }
-
   const purchase = await useDB().insert(tables.purchaseEvents).values({
     userId: user.id,
     brand: input.brand,
@@ -57,22 +50,25 @@ export default eventHandler(async (event) => {
     price: input.price ?? null
   }).returning().get()
 
-  const snapshot = await useDB().insert(tables.purchaseMeasurementSnapshots).values({
-    purchaseEventId: purchase.id,
-    userId: user.id,
-    measuredAt: measurement.recordedAt,
-    weightKg: measurement.weightKg,
-    heightCm: measurement.heightCm,
-    chestCm: measurement.chestCm,
-    waistCm: measurement.waistCm,
-    hipsCm: measurement.hipsCm,
-    shoulderWidthCm: measurement.shoulderWidthCm,
-    sleeveLengthCm: measurement.sleeveLengthCm,
-    neckCm: measurement.neckCm,
-    inseamCm: measurement.inseamCm,
-    thighCm: measurement.thighCm,
-    footCm: measurement.footCm
-  }).returning().get()
+  let snapshot = null
+  if (measurement) {
+    snapshot = await useDB().insert(tables.purchaseMeasurementSnapshots).values({
+      purchaseEventId: purchase.id,
+      userId: user.id,
+      measuredAt: measurement.recordedAt,
+      weightKg: measurement.weightKg,
+      heightCm: measurement.heightCm,
+      chestCm: measurement.chestCm,
+      waistCm: measurement.waistCm,
+      hipsCm: measurement.hipsCm,
+      shoulderWidthCm: measurement.shoulderWidthCm,
+      sleeveLengthCm: measurement.sleeveLengthCm,
+      neckCm: measurement.neckCm,
+      inseamCm: measurement.inseamCm,
+      thighCm: measurement.thighCm,
+      footCm: measurement.footCm
+    }).returning().get()
+  }
 
   return {
     purchase,
