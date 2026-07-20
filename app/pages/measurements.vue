@@ -34,6 +34,24 @@ const form = reactive({
 
 const bulkJson = ref('')
 const isAddMeasurementDialogOpen = ref(false)
+const isEditMeasurementDialogOpen = ref(false)
+const editingId = ref<number | null>(null)
+
+const editForm = reactive({
+  weightKg: '',
+  heightCm: '',
+  chestCm: '',
+  waistCm: '',
+  hipsCm: '',
+  shoulderWidthCm: '',
+  sleeveLengthCm: '',
+  neckCm: '',
+  inseamCm: '',
+  thighCm: '',
+  footCm: '',
+  notes: '',
+  recordedAt: ''
+})
 
 const resetForm = () => {
   form.weightKg = ''
@@ -49,6 +67,30 @@ const resetForm = () => {
   form.footCm = ''
   form.notes = ''
   isAddMeasurementDialogOpen.value = false
+}
+
+const openEdit = (item: Measurement) => {
+  editingId.value = item.id
+  editForm.weightKg = String(item.weightKg)
+  editForm.heightCm = item.heightCm != null ? String(item.heightCm) : ''
+  editForm.chestCm = item.chestCm != null ? String(item.chestCm) : ''
+  editForm.waistCm = item.waistCm != null ? String(item.waistCm) : ''
+  editForm.hipsCm = item.hipsCm != null ? String(item.hipsCm) : ''
+  editForm.shoulderWidthCm = item.shoulderWidthCm != null ? String(item.shoulderWidthCm) : ''
+  editForm.sleeveLengthCm = item.sleeveLengthCm != null ? String(item.sleeveLengthCm) : ''
+  editForm.neckCm = item.neckCm != null ? String(item.neckCm) : ''
+  editForm.inseamCm = item.inseamCm != null ? String(item.inseamCm) : ''
+  editForm.thighCm = item.thighCm != null ? String(item.thighCm) : ''
+  editForm.footCm = item.footCm != null ? String(item.footCm) : ''
+  editForm.notes = item.notes ?? ''
+  const d = new Date(item.recordedAt)
+  editForm.recordedAt = d.toISOString().slice(0, 10)
+  isEditMeasurementDialogOpen.value = true
+}
+
+const closeEdit = () => {
+  isEditMeasurementDialogOpen.value = false
+  editingId.value = null
 }
 
 const { loggedIn } = useUserSession()
@@ -98,6 +140,42 @@ const { mutate: removeMeasurement } = useMutation({
   async onSuccess() {
     await queryCache.invalidateQueries(measurementsQuery)
     toast.add({ title: 'Medida eliminada.' })
+  }
+})
+
+const { mutate: updateMeasurement, isLoading: updating } = useMutation({
+  mutation: () => requestFetch(`/api/measurements/${editingId.value}`, {
+    method: 'PATCH',
+    body: {
+      weightKg: editForm.weightKg ? Number(editForm.weightKg) : undefined,
+      heightCm: editForm.heightCm ? Number(editForm.heightCm) : undefined,
+      chestCm: editForm.chestCm ? Number(editForm.chestCm) : undefined,
+      waistCm: editForm.waistCm ? Number(editForm.waistCm) : undefined,
+      hipsCm: editForm.hipsCm ? Number(editForm.hipsCm) : undefined,
+      shoulderWidthCm: editForm.shoulderWidthCm ? Number(editForm.shoulderWidthCm) : undefined,
+      sleeveLengthCm: editForm.sleeveLengthCm ? Number(editForm.sleeveLengthCm) : undefined,
+      neckCm: editForm.neckCm ? Number(editForm.neckCm) : undefined,
+      inseamCm: editForm.inseamCm ? Number(editForm.inseamCm) : undefined,
+      thighCm: editForm.thighCm ? Number(editForm.thighCm) : undefined,
+      footCm: editForm.footCm ? Number(editForm.footCm) : undefined,
+      notes: editForm.notes || undefined,
+      recordedAt: editForm.recordedAt ? new Date(editForm.recordedAt).toISOString() : undefined
+    }
+  }),
+  async onSuccess() {
+    await queryCache.invalidateQueries(measurementsQuery)
+    closeEdit()
+    toast.add({ title: 'Medida actualizada.' })
+  },
+  onError(err) {
+    if (isNuxtZodError(err)) {
+      const title = err.data?.data.issues.map((issue: { message: string }) => issue.message).join('\n')
+      if (title) {
+        toast.add({ title, color: 'error' })
+      }
+      return
+    }
+    toast.add({ title: 'No se pudo actualizar la medida.', color: 'error' })
   }
 })
 
@@ -222,6 +300,44 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
       </template>
     </UModal>
 
+    <!-- Edit Measurement Modal -->
+    <UModal v-model:open="isEditMeasurementDialogOpen">
+      <template #content>
+        <div class="space-y-4 p-4 sm:p-6 max-h-[85dvh] overflow-y-auto">
+          <div>
+            <h3 class="text-lg font-medium">
+              Editar medida
+            </h3>
+          </div>
+
+          <form class="grid grid-cols-1 sm:grid-cols-2 gap-3" @submit.prevent="updateMeasurement()">
+            <UInput v-model="editForm.recordedAt" type="date" required class="sm:col-span-2" />
+            <UInput v-model="editForm.weightKg" type="number" step="0.1" min="1" placeholder="Peso (kg) *" required />
+            <UInput v-model="editForm.heightCm" type="number" step="0.1" min="1" placeholder="Altura (cm)" />
+            <UInput v-model="editForm.chestCm" type="number" step="0.1" min="1" placeholder="Pecho (cm)" />
+            <UInput v-model="editForm.waistCm" type="number" step="0.1" min="1" placeholder="Cintura (cm)" />
+            <UInput v-model="editForm.hipsCm" type="number" step="0.1" min="1" placeholder="Cadera (cm)" />
+            <UInput v-model="editForm.shoulderWidthCm" type="number" step="0.1" min="1" placeholder="Ancho de hombros (cm)" />
+            <UInput v-model="editForm.sleeveLengthCm" type="number" step="0.1" min="1" placeholder="Largo de manga (cm)" />
+            <UInput v-model="editForm.neckCm" type="number" step="0.1" min="1" placeholder="Cuello (cm)" />
+            <UInput v-model="editForm.inseamCm" type="number" step="0.1" min="1" placeholder="Tiro (cm)" />
+            <UInput v-model="editForm.thighCm" type="number" step="0.1" min="1" placeholder="Muslo (cm)" />
+            <UInput v-model="editForm.footCm" type="number" step="0.1" min="1" placeholder="Pie (cm)" />
+            <UInput v-model="editForm.notes" placeholder="Notas (opcional)" />
+
+            <div class="sm:col-span-2 flex flex-wrap gap-2">
+              <UButton type="submit" icon="i-lucide-save" :loading="updating" :disabled="!editForm.weightKg">
+                Guardar cambios
+              </UButton>
+              <UButton type="button" variant="soft" color="neutral" icon="i-lucide-x" @click="closeEdit">
+                Cancelar
+              </UButton>
+            </div>
+          </form>
+        </div>
+      </template>
+    </UModal>
+
     <div class="space-y-2">
       <h3 class="font-medium">
         Historial
@@ -241,9 +357,14 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
             </p>
           </div>
 
-          <UButton color="error" variant="soft" size="xs" icon="i-lucide-trash" @click="removeMeasurement(item.id)">
-            Eliminar
-          </UButton>
+          <div class="flex flex-col gap-2">
+            <UButton color="error" variant="soft" size="xs" icon="i-lucide-trash" @click="removeMeasurement(item.id)">
+              Eliminar
+            </UButton>
+            <UButton variant="soft" color="neutral" size="xs" icon="i-lucide-pencil" @click="openEdit(item)">
+              Editar
+            </UButton>
+          </div>
         </li>
       </ul>
     </div>
