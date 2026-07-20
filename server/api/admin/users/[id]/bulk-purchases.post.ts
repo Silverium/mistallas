@@ -60,9 +60,21 @@ export default eventHandler(async (event) => {
   const fitFeedbacks = ['Perfect', 'Snug', 'Loose', 'Just Right', null, null]
 
   const purchases = []
-  const baseDate = input.startDate ? new Date(input.startDate) : new Date()
+  // Parse startDate as the oldest purchase date, or use 30 days ago as default
+  let baseDate: Date
+  if (input.startDate) {
+    baseDate = new Date(input.startDate)
+  }
+  else {
+    baseDate = new Date()
+    baseDate.setDate(baseDate.getDate() - 30) // Default to 30 days ago
+  }
 
   for (let i = 0; i < input.count; i++) {
+    // Calculate date by adding days (going forward in time)
+    const purchaseDate = new Date(baseDate)
+    purchaseDate.setDate(purchaseDate.getDate() + i)
+
     const purchase = await db
       .insert(tables.purchaseEvents)
       .values({
@@ -71,7 +83,7 @@ export default eventHandler(async (event) => {
         category: categories[i % categories.length],
         productType: productTypes[i % productTypes.length],
         sizeLabel: sizes[i % sizes.length],
-        purchasedAt: new Date(baseDate.getTime() - i * 86400000), // decrement by 1 day each
+        purchasedAt: purchaseDate,
         fitFeedback: fitFeedbacks[i % fitFeedbacks.length],
         notes: `Bulk test purchase #${i + 1}`,
         price: Math.random() > 0.3 ? Math.floor(Math.random() * 20000) / 100 : null // random 0-200 or null

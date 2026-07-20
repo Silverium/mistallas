@@ -248,6 +248,9 @@
                   v-model="bulkPurchasesForm.startDate"
                   type="date"
                 />
+                <p class="text-xs text-muted mt-1">
+                  Fecha más antigua. Por defecto: 30 días atrás.
+                </p>
               </div>
             </div>
 
@@ -265,6 +268,14 @@
                 Ingresa una marca por línea. Déjalo vacío para usar marcas predeterminadas.
               </p>
             </div>
+
+            <UAlert
+              color="info"
+              variant="soft"
+              title="Cómo funcionan las fechas"
+              description="Las compras se crean una por día, empezando desde la fecha indicada (o 30 días atrás). Las fechas avanzan hacia adelante en el tiempo."
+              class="mb-4"
+            />
 
             <UAlert
               v-if="bulkPurchasesMessage"
