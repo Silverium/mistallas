@@ -294,6 +294,15 @@
               </UButton>
               <UButton
                 variant="outline"
+                color="error"
+                :disabled="generatingBulkPurchases || deletingBulkPurchases"
+                :loading="deletingBulkPurchases"
+                @click="deleteBulkPurchases"
+              >
+                Borrar compras de prueba
+              </UButton>
+              <UButton
+                variant="outline"
                 color="neutral"
                 :disabled="generatingBulkPurchases"
                 @click="resetBulkForm"
@@ -416,6 +425,7 @@ const bulkPurchasesForm = reactive({
 const generatingBulkPurchases = ref(false)
 const bulkPurchasesMessage = ref('')
 const bulkPurchasesMessageType = ref<'success' | 'error'>('success')
+const deletingBulkPurchases = ref(false)
 
 const tierOptions = [
   { label: 'Gratis', value: 'free' },
@@ -658,6 +668,40 @@ async function generateBulkPurchases() {
   }
   finally {
     generatingBulkPurchases.value = false
+  }
+}
+
+async function deleteBulkPurchases() {
+  const confirmed = confirm('¿Seguro que deseas eliminar todas las compras de prueba de este usuario? Esta acción no se puede deshacer.')
+  if (!confirmed) {
+    return
+  }
+
+  deletingBulkPurchases.value = true
+  bulkPurchasesMessage.value = ''
+
+  try {
+    const result = await requestFetch<{ deleted: number, message: string }>(
+      `/api/admin/users/${encodeURIComponent(userId)}/bulk-purchases/delete`,
+      {
+        method: 'POST'
+      }
+    )
+
+    bulkPurchasesMessage.value = `✓ ${result.message}`
+    bulkPurchasesMessageType.value = 'success'
+    await fetchUser()
+    setTimeout(() => {
+      bulkPurchasesMessage.value = ''
+    }, 5000)
+  }
+  catch (error) {
+    console.error('Error al eliminar compras:', error)
+    bulkPurchasesMessage.value = error instanceof Error ? error.message : 'Error al eliminar compras de prueba'
+    bulkPurchasesMessageType.value = 'error'
+  }
+  finally {
+    deletingBulkPurchases.value = false
   }
 }
 </script>
