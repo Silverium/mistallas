@@ -10,9 +10,24 @@ type PurchasePhoto = {
   createdAt: string | Date | null
 }
 
+export type PurchasesPaginatedResponse = {
+  purchases: unknown[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
 export const purchasesQuery = defineQueryOptions({
   key: ['purchases'],
-  query: () => useRequestFetch()('/api/purchases') as Promise<unknown[]>
+  query: () => useRequestFetch()('/api/purchases') as Promise<PurchasesPaginatedResponse>
+})
+
+export const purchasesPageQuery = (page: number = 1, limit: number = 20) => defineQueryOptions({
+  key: ['purchases', page, limit],
+  query: () => useRequestFetch()(`/api/purchases?page=${page}&limit=${limit}`) as Promise<PurchasesPaginatedResponse>
 })
 
 export const purchaseComparisonQuery = (purchaseId: number) => defineQueryOptions({
