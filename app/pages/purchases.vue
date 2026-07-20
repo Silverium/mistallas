@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { measurementsQuery } from '~/queries/measurements'
 import { purchasesPageQuery } from '~/queries/purchases'
 import { getSpanishApiErrorMessage, isNuxtZodError } from '~/utils/errors'
 import { blobToBase64, compressImage } from '~/utils/image-compression'
@@ -93,6 +94,14 @@ type RowDiff = {
 }
 
 const { loggedIn } = useUserSession()
+const router = useRouter()
+
+const { data: measurements } = useQuery({
+  ...measurementsQuery,
+  enabled: () => loggedIn.value
+})
+
+const hasMeasurements = computed(() => (measurements.value?.length ?? 0) > 0)
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -619,7 +628,7 @@ const diffRows = computed<RowDiff[]>(() => {
         Compras
       </h2>
       <p class="text-sm text-muted">
-        Guarda compras para comparar tus medidas de ese momento con las actuales.
+        Guarda compras para comparar tus tallas de ese momento con las actuales.
       </p>
       <div class="mt-3">
         <UButton
@@ -629,6 +638,18 @@ const diffRows = computed<RowDiff[]>(() => {
         >
           Añadir compra
         </UButton>
+        <div v-if="!hasMeasurements" class="space-y-2">
+          <p class="text-sm text-muted">
+            Necesitas registrar al menos una medida corporal para poder comparar cómo ha cambiado tu cuerpo después de la compra.
+          </p>
+          <UButton
+            type="button"
+            icon="i-lucide-plus"
+            @click="router.push('/measurements')"
+          >
+            Añadir medidas
+          </UButton>
+        </div>
       </div>
     </div>
 
@@ -719,6 +740,7 @@ const diffRows = computed<RowDiff[]>(() => {
               icon="i-lucide-git-compare"
               class="h-10 w-full justify-center text-center sm:h-10"
               :loading="comparing && selectedPurchase?.id === purchase.id"
+              :disabled="!hasMeasurements"
               @click="comparePurchase(purchase)"
             >
               Comparar medidas
