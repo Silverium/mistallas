@@ -214,6 +214,85 @@
           </div>
         </UCard>
 
+        <!-- Bulk Purchases Card -->
+        <UCard>
+          <template #header>
+            <h2 class="text-lg font-semibold">
+              Generar compras de prueba
+            </h2>
+          </template>
+
+          <div class="space-y-4">
+            <p class="text-sm text-muted">
+              Crea compras ficticias para probar el comportamiento de paginación, límites de tier y rendimiento.
+            </p>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-muted mb-2">
+                  Número de compras
+                </label>
+                <UInput
+                  v-model.number="bulkPurchasesForm.count"
+                  type="number"
+                  min="1"
+                  max="5000"
+                  placeholder="100"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-muted mb-2">
+                  Fecha de inicio (opcional)
+                </label>
+                <UInput
+                  v-model="bulkPurchasesForm.startDate"
+                  type="date"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-muted mb-2">
+                Marcas personalizadas (opcional)
+              </label>
+              <UTextarea
+                v-model="bulkPurchasesForm.brandsInput"
+                placeholder="Nike&#10;Adidas&#10;Puma"
+                :rows="3"
+                class="font-mono text-sm"
+              />
+              <p class="text-xs text-muted mt-1">
+                Ingresa una marca por línea. Déjalo vacío para usar marcas predeterminadas.
+              </p>
+            </div>
+
+            <UAlert
+              v-if="bulkPurchasesMessage"
+              :color="bulkPurchasesMessageType === 'success' ? 'success' : 'error'"
+              variant="soft"
+              :title="bulkPurchasesMessage"
+            />
+
+            <div class="flex gap-3">
+              <UButton
+                :loading="generatingBulkPurchases"
+                :disabled="!bulkPurchasesForm.count || generatingBulkPurchases"
+                @click="generateBulkPurchases"
+              >
+                Generar {{ bulkPurchasesForm.count || 0 }} compras
+              </UButton>
+              <UButton
+                variant="outline"
+                color="neutral"
+                :disabled="generatingBulkPurchases"
+                @click="resetBulkForm"
+              >
+                Limpiar
+              </UButton>
+            </div>
+          </div>
+        </UCard>
+
         <!-- Subscription Info Card -->
         <UCard v-if="user.stripeSubscriptionId">
           <template #header>
@@ -316,6 +395,16 @@ const saveMessageType = ref<'success' | 'error'>('success')
 const editedTier = ref<'free' | 'premium' | 'enterprise' | ''>('')
 const editedRole = ref<'user' | 'admin' | ''>('')
 const isPreviewVisible = ref(false)
+
+const bulkPurchasesForm = reactive({
+  count: 100,
+  startDate: '',
+  brandsInput: ''
+})
+
+const generatingBulkPurchases = ref(false)
+const bulkPurchasesMessage = ref('')
+const bulkPurchasesMessageType = ref<'success' | 'error'>('success')
 
 const tierOptions = [
   { label: 'Gratis', value: 'free' },
@@ -500,5 +589,64 @@ function formatRole(role: 'user' | 'admin') {
     admin: 'Administrador'
   }
   return labels[role]
+}
+
+function resetBulkForm() {
+  bulkPurchasesForm.count = 100
+  bulkPurchasesForm.startDate = ''
+  bulkPurchasesForm.brandsInput = ''
+  bulkPurchasesMessage.value = ''
+}
+
+async function generateBulkPurchases() {
+  if (!bulkPurchasesForm.count || bulkPurchasesForm.count < 1 || bulkPurchasesForm.count > 5000) {
+    bulkPurchasesMessage.value = 'Por favor, ingresa un número válido de compras (1-5000)'
+    bulkPurchasesMessageType.value = 'error'
+    return
+  }
+
+  generatingBulkPurchases.value = true
+  bulkPurchasesMessage.value = ''
+
+  try {
+    const body: { count: number, startDate?: string, brands?: string[] } = {
+      count: bulkPurchasesForm.count
+    }
+
+    if (bulkPurchasesForm.startDate) {
+      body.startDate = new Date(bulkPurchasesForm.startDate).toISOString()
+    }
+
+    if (bulkPurchasesForm.brandsInput.trim()) {
+      body.brands = bulkPurchasesForm.brandsInput
+        .split('\n')
+        .map(b => b.trim())
+        .filter(b => b.length > 0)
+    }
+
+    const result = await requestFetch<{ created: number }>(
+      `/api/admin/users/${encodeURIComponent(userId)}/bulk-purchases`,
+      {
+        method: 'POST',
+        body
+      }
+    )
+
+    bulkPurchasesMessage.value = `✓ Se crearon ${result.created} compras de prueba exitosamente`
+    bulkPurchasesMessageType.value = 'success'
+    resetBulkForm()
+    await fetchUser()
+    setTimeout(() => {
+      bulkPurchasesMessage.value = ''
+    }, 5000)
+  }
+  catch (error) {
+    console.error('Error al generar compras:', error)
+    bulkPurchasesMessage.value = error instanceof Error ? error.message : 'Error al generar compras de prueba'
+    bulkPurchasesMessageType.value = 'error'
+  }
+  finally {
+    generatingBulkPurchases.value = false
+  }
 }
 </script>
