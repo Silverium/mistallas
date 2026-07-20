@@ -177,15 +177,18 @@ describe('POST /api/purchases tier enforcement', () => {
     expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(2, mocks.tables.purchaseMeasurementSnapshots)
   })
 
-  it('requires a measurement when none exist, even if the user is under the tier limit', async () => {
+  it('creates a purchase without a snapshot when no measurements exist and user is under the tier limit', async () => {
     mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-4', tier: 'premium' } })
     mocks.state.purchaseCount = 499
 
     const { default: handler } = await import('./index.post')
 
-    await expect(handler({} as never)).rejects.toMatchObject({
-      statusCode: 400,
-      message: 'A measurement is required before logging a purchase.'
+    await expect(handler({} as never)).resolves.toEqual({
+      purchase: mocks.state.createdPurchase,
+      snapshot: null
     })
+
+    expect(mocks.dbClient.insert).toHaveBeenCalledTimes(1)
+    expect(mocks.dbClient.insert).toHaveBeenCalledWith(mocks.tables.purchaseEvents)
   })
 })
