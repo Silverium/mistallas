@@ -76,7 +76,7 @@ const editingPurchaseId = ref<number | null>(null)
 const deletingPurchaseId = ref<number | null>(null)
 const isAddPurchaseDialogOpen = ref(false)
 const isEditPurchaseDialogOpen = ref(false)
-const pendingPhotosToUpload = ref<File[]>([])
+const pendingPhotosToUpload = ref<{ blob: Blob; mimeType: string }[]>([])
 
 type PendingPhotoPreview = {
   file: File
@@ -300,16 +300,15 @@ const isPreviewOpen = computed({
   }
 })
 
-const uploadPhotoFile = async (purchaseId: number, file: File) => {
+const uploadPhotoFile = async (purchaseId: number, compressedPhoto: { blob: Blob; mimeType: string }) => {
   try {
-    const compressedBlob = await compressImage(file)
-    const fileBase64 = await blobToBase64(compressedBlob)
+    const fileBase64 = await blobToBase64(compressedPhoto.blob)
 
     await requestFetch(`/api/purchases/${purchaseId}/photos`, {
       method: 'POST',
       body: {
         fileBase64,
-        mimeType: compressedBlob.type || 'image/webp'
+        mimeType: compressedPhoto.mimeType
       }
     })
   }
@@ -329,8 +328,8 @@ const uploadPendingPhotos = async (purchaseId: number) => {
 
   try {
     // Upload all pending photos sequentially
-    for (const file of pendingPhotosToUpload.value) {
-      await uploadPhotoFile(purchaseId, file)
+    for (const photo of pendingPhotosToUpload.value) {
+      await uploadPhotoFile(purchaseId, photo)
     }
 
     // After all uploads succeed, refresh and notify
@@ -367,13 +366,14 @@ const onPhotoInputChange = async (event: Event) => {
 
     try {
       const compressedBlob = await compressImage(file)
+      const mimeType = compressedBlob.type || 'image/webp'
       const fileBase64 = await blobToBase64(compressedBlob)
 
       await requestFetch(`/api/purchases/${purchaseId}/photos`, {
         method: 'POST',
         body: {
           fileBase64,
-          mimeType: compressedBlob.type || 'image/webp'
+          mimeType
         }
       })
 
@@ -390,8 +390,20 @@ const onPhotoInputChange = async (event: Event) => {
   }
   // Pending upload from edit dialog
   else if (editingPurchaseId.value) {
-    pendingPhotosToUpload.value.push(file)
-    toast.add({ title: 'Foto agregada (se subirá al guardar)' })
+    try {
+      const compressedBlob = await compressImage(file)
+      pendingPhotosToUpload.value.push({
+        blob: compressedBlob,
+        mimeType: compressedBlob.type || 'image/webp'
+      })
+      toast.add({ title: 'Foto agregada (se subirá al guardar)' })
+    }
+    catch (_err) {
+      toast.add({
+        title: getSpanishApiErrorMessage(_err) ?? 'Error al procesar la foto',
+        color: 'error'
+      })
+    }
   }
 
   input.value = ''
@@ -521,9 +533,9 @@ const confirmAndDelete = (purchase: Purchase) => {
 const filteredPhotoList = computed(() => (photoList.value ?? []) as PurchasePhoto[])
 
 const pendingPhotosPreviews = computed<PendingPhotoPreview[]>(() => {
-  return pendingPhotosToUpload.value.map(file => ({
-    file,
-    previewUrl: URL.createObjectURL(file)
+  return pendingPhotosToUpload.value.map(photo => ({
+    file: photo.blob as unknown as File,
+    previewUrl: URL.createObjectURL(photo.blob)
   }))
 })
 
