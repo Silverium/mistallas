@@ -33,7 +33,7 @@ const form = reactive({
 })
 
 const bulkJson = ref('')
-const isMeasurementFormVisible = ref(false)
+const isAddMeasurementDialogOpen = ref(false)
 
 const resetForm = () => {
   form.weightKg = ''
@@ -48,7 +48,7 @@ const resetForm = () => {
   form.thighCm = ''
   form.footCm = ''
   form.notes = ''
-  isMeasurementFormVisible.value = false
+  isAddMeasurementDialogOpen.value = false
 }
 
 const { loggedIn } = useUserSession()
@@ -157,184 +157,91 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         Guarda tu historial para comparar cómo cambiaste entre compras.
       </p>
       <div class="mt-3">
-        <UButton
-          v-if="!isMeasurementFormVisible"
-          type="button"
-          icon="i-lucide-plus"
-          @click="() => { isMeasurementFormVisible = true }"
-        >
+        <UButton type="button" icon="i-lucide-plus" @click="() => { isAddMeasurementDialogOpen = true }">
           Añadir medida
         </UButton>
       </div>
     </div>
 
-    <form
-      v-if="isMeasurementFormVisible"
-      class="grid grid-cols-1 sm:grid-cols-2 gap-3"
-      @submit.prevent="addMeasurement()"
-    >
-      <UInput
-        v-model="form.weightKg"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Peso (kg) *"
-        required
-        autofocus
-      />
-      <UInput
-        v-model="form.heightCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Altura (cm)"
-      />
-      <UInput
-        v-model="form.chestCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Pecho (cm)"
-      />
-      <UInput
-        v-model="form.waistCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Cintura (cm)"
-      />
-      <UInput
-        v-model="form.hipsCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Cadera (cm)"
-      />
-      <UInput
-        v-model="form.shoulderWidthCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Ancho de hombros (cm)"
-      />
-      <UInput
-        v-model="form.sleeveLengthCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Largo de manga (cm)"
-      />
-      <UInput
-        v-model="form.neckCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Cuello (cm)"
-      />
-      <UInput
-        v-model="form.inseamCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Tiro (cm)"
-      />
-      <UInput
-        v-model="form.thighCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Muslo (cm)"
-      />
-      <UInput
-        v-model="form.footCm"
-        type="number"
-        step="0.1"
-        min="1"
-        placeholder="Pie (cm)"
-      />
-      <UInput
-        v-model="form.notes"
-        placeholder="Notas (opcional)"
-      />
+    <!-- Add Measurement Modal -->
+    <UModal v-model:open="isAddMeasurementDialogOpen">
+      <template #content>
+        <div class="space-y-4 p-4 sm:p-6">
+          <div>
+            <h3 class="text-lg font-medium">
+              Añadir medida
+            </h3>
+          </div>
 
-      <div class="sm:col-span-2 flex flex-wrap gap-2">
-        <UButton
-          type="submit"
-          icon="i-lucide-save"
-          :loading="adding"
-          :disabled="!form.weightKg"
-        >
-          Guardar medida
-        </UButton>
-        <UButton
-          type="button"
-          variant="soft"
-          color="neutral"
-          icon="i-lucide-x"
-          @click="resetForm"
-        >
-          Cerrar formulario
-        </UButton>
-      </div>
-    </form>
+          <form class="grid grid-cols-1 sm:grid-cols-2 gap-3" @submit.prevent="addMeasurement()">
+            <UInput v-model="form.weightKg" type="number" step="0.1" min="1" placeholder="Peso (kg) *" required
+              autofocus />
+            <UInput v-model="form.heightCm" type="number" step="0.1" min="1" placeholder="Altura (cm)" />
+            <UInput v-model="form.chestCm" type="number" step="0.1" min="1" placeholder="Pecho (cm)" />
+            <UInput v-model="form.waistCm" type="number" step="0.1" min="1" placeholder="Cintura (cm)" />
+            <UInput v-model="form.hipsCm" type="number" step="0.1" min="1" placeholder="Cadera (cm)" />
+            <UInput v-model="form.shoulderWidthCm" type="number" step="0.1" min="1"
+              placeholder="Ancho de hombros (cm)" />
+            <UInput v-model="form.sleeveLengthCm" type="number" step="0.1" min="1" placeholder="Largo de manga (cm)" />
+            <UInput v-model="form.neckCm" type="number" step="0.1" min="1" placeholder="Cuello (cm)" />
+            <UInput v-model="form.inseamCm" type="number" step="0.1" min="1" placeholder="Tiro (cm)" />
+            <UInput v-model="form.thighCm" type="number" step="0.1" min="1" placeholder="Muslo (cm)" />
+            <UInput v-model="form.footCm" type="number" step="0.1" min="1" placeholder="Pie (cm)" />
+            <UInput v-model="form.notes" placeholder="Notas (opcional)" />
 
-    <div
-      v-if="isMeasurementFormVisible"
-      class="space-y-2"
-    >
-      <h3 class="font-medium">
-        Carga masiva (JSON)
-      </h3>
-      <p class="text-sm text-muted">
-        Pega un arreglo JSON de medidas para subir historial en lote.
-      </p>
-      <UTextarea
-        v-model="bulkJson"
-        :rows="6"
-        placeholder="[{&quot;weightKg&quot;:70,&quot;waistCm&quot;:82,&quot;recordedAt&quot;:&quot;2020-03-10&quot;},{&quot;weightKg&quot;:85,&quot;waistCm&quot;:94}]"
-      />
-      <UButton
-        icon="i-lucide-upload"
-        :loading="uploading"
-        :disabled="!bulkJson.trim()"
-        @click="uploadMeasurements()"
-      >
-        Subir medidas
-      </UButton>
-    </div>
+            <div class="sm:col-span-2 flex flex-wrap gap-2">
+              <UButton type="submit" icon="i-lucide-save" :loading="adding" :disabled="!form.weightKg">
+                Guardar medida
+              </UButton>
+              <UButton type="button" variant="soft" color="neutral" icon="i-lucide-x" @click="resetForm">
+                Cancelar
+              </UButton>
+            </div>
+          </form>
+
+          <div class="space-y-2 border-t pt-4">
+            <h3 class="font-medium">
+              Carga masiva (JSON)
+            </h3>
+            <div class="flex">
+
+              <p class="text-sm text-muted">
+                Pega un arreglo JSON de medidas para subir historial en lote.
+              </p>
+              <UButton icon="i-lucide-upload" :loading="uploading" :disabled="!bulkJson.trim()"
+                @click="uploadMeasurements()">
+                Subir medidas
+              </UButton>
+            </div>
+
+            <UTextarea v-model="bulkJson" :rows="6" class="w-full"
+              placeholder="[{&quot;weightKg&quot;:70,&quot;waistCm&quot;:82,&quot;recordedAt&quot;:&quot;2020-03-10&quot;},{&quot;weightKg&quot;:85,&quot;waistCm&quot;:94}]" />
+
+          </div>
+        </div>
+      </template>
+    </UModal>
 
     <div class="space-y-2">
       <h3 class="font-medium">
         Historial
       </h3>
       <ul class="divide-y divide-gray-200 dark:divide-gray-800">
-        <li
-          v-for="item in formattedMeasurements"
-          :key="item.id"
-          class="py-3 flex items-start justify-between gap-3"
-        >
+        <li v-for="item in formattedMeasurements" :key="item.id" class="py-3 flex items-start justify-between gap-3">
           <div>
             <p class="font-medium">
               {{ item.weightKg }} kg · {{ new Date(item.recordedAt).toLocaleDateString() }}
             </p>
             <p class="text-sm text-muted">
-              {{ measurementSpecs.filter(s => s.key !== 'weightKg').map(s => `${s.label}: ${item[s.key as MeasurementFieldKey] ?? '—'} ${s.unit}`).join(' · ') }}
+              {{measurementSpecs.filter(s => s.key !== 'weightKg').map(s => `${s.label}: ${item[s.key as
+                MeasurementFieldKey] ?? '—'} ${s.unit}`).join(' · ')}}
             </p>
-            <p
-              v-if="item.notes"
-              class="text-sm text-muted"
-            >
+            <p v-if="item.notes" class="text-sm text-muted">
               {{ item.notes }}
             </p>
           </div>
 
-          <UButton
-            color="error"
-            variant="soft"
-            size="xs"
-            icon="i-lucide-trash"
-            @click="removeMeasurement(item.id)"
-          >
+          <UButton color="error" variant="soft" size="xs" icon="i-lucide-trash" @click="removeMeasurement(item.id)">
             Eliminar
           </UButton>
         </li>
