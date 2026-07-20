@@ -97,14 +97,19 @@ const { loggedIn } = useUserSession()
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-const currentPageQuery = computed(() => purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
+const baseQueryOptions = computed(() => purchasesPageQuery(currentPage.value, pageSize.value, ''))
 
 const { data: purchasesResponse } = useQuery({
-  get key() {
-    return currentPageQuery.value.key
-  },
-  get query() {
-    return currentPageQuery.value.query
+  key: () => [baseQueryOptions.value.key[0], baseQueryOptions.value.key[1], baseQueryOptions.value.key[2], historyFilter.value],
+  query: async () => {
+    const params = new URLSearchParams({
+      page: String(currentPage.value),
+      limit: String(pageSize.value)
+    })
+    if (historyFilter.value.trim()) {
+      params.append('search', historyFilter.value.trim())
+    }
+    return useRequestFetch()(`/api/purchases?${params.toString()}`)
   },
   enabled: () => loggedIn.value
 })
@@ -114,10 +119,10 @@ watch(() => currentPage.value, () => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }, { immediate: false })
 
-watch(() => historyFilter.value, () => {
+watch(() => historyFilter.value, async () => {
   // Reset to page 1 when search term changes
   currentPage.value = 1
-})
+}, { flush: 'post' })
 
 const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
   mutation: () => requestFetch('/api/purchases', {

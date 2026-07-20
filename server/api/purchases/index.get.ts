@@ -1,5 +1,6 @@
 import { and, eq, inArray, desc } from 'drizzle-orm'
 import { useValidatedQuery, z } from 'h3-zod'
+import { calculatePurchaseSearchScore } from '../../utils/fuzzy-search'
 import { tables, useDB } from '../../utils/db'
 
 export default eventHandler(async (event) => {
@@ -13,31 +14,7 @@ export default eventHandler(async (event) => {
 
   const db = useDB()
 
-  // Get total count for pagination
-  const countResult = await db
-    .select()
-    .from(tables.purchaseEvents)
-    .where(eq(tables.purchaseEvents.userId, user.id))
-    .all()
-
-  const totalCount = query.search?.trim()
-    ? countResult.filter((purchase) => {
-      const searchTerm = query.search!.toLowerCase()
-      return (
-        purchase.brand.toLowerCase().includes(searchTerm)
-        || purchase.category.toLowerCase().includes(searchTerm)
-        || purchase.productType.toLowerCase().includes(searchTerm)
-        || purchase.sizeLabel.toLowerCase().includes(searchTerm)
-        || (purchase.fitFeedback?.toLowerCase().includes(searchTerm) ?? false)
-        || (purchase.notes?.toLowerCase().includes(searchTerm) ?? false)
-      )
-    }).length
-    : countResult.length
-
-  const totalPages = Math.ceil(totalCount / query.limit)
-  const offset = (query.page - 1) * query.limit
-
-  // Get paginated purchases (filter in application for now)
+  // Get all purchases for the user
   const purchases = await db
     .select()
     .from(tables.purchaseEvents)
@@ -45,21 +22,23 @@ export default eventHandler(async (event) => {
     .orderBy(desc(tables.purchaseEvents.purchasedAt))
     .all()
 
-  // Filter by search term if provided
+  // Filter by search term if provided (using fuzzy search)
   let filtered = purchases
   if (query.search?.trim()) {
-    const searchTerm = query.search.toLowerCase()
-    filtered = purchases.filter((purchase) => {
-      return (
-        purchase.brand.toLowerCase().includes(searchTerm)
-        || purchase.category.toLowerCase().includes(searchTerm)
-        || purchase.productType.toLowerCase().includes(searchTerm)
-        || purchase.sizeLabel.toLowerCase().includes(searchTerm)
-        || (purchase.fitFeedback?.toLowerCase().includes(searchTerm) ?? false)
-        || (purchase.notes?.toLowerCase().includes(searchTerm) ?? false)
-      )
-    })
+    const searchTerm = query.search.trim()
+    filtered = purchases
+      .map(purchase => ({
+        purchase,
+        score: calculatePurchaseSearchScore(purchase, searchTerm)
+      }))
+      .filter(item => item.score >= 0.2) // Only include matches with score >= 0.2
+      .sort((a, b) => b.score - a.score) // Sort by relevance
+      .map(item => item.purchase)
   }
+
+  const totalCount = filtered.length
+  const totalPages = Math.ceil(totalCount / query.limit)
+  const offset = (query.page - 1) * query.limit
 
   // Apply pagination
   const paginatedPurchases = filtered.slice(offset, offset + query.limit)
