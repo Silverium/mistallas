@@ -755,7 +755,7 @@ const diffRows = computed<RowDiff[]>(() => {
     <!-- Add/Edit Purchase Dialog -->
     <UModal v-model:open="isAddPurchaseDialogOpen">
       <template #content>
-        <div class="space-y-4 p-4 sm:p-6">
+        <div class="space-y-4 p-4 sm:p-6 max-h-[85dvh] overflow-y-auto">
           <div>
             <h3 class="text-lg font-medium">
               Añadir compra
@@ -831,7 +831,7 @@ const diffRows = computed<RowDiff[]>(() => {
     <!-- Edit Purchase Dialog -->
     <UModal v-model:open="isEditModalOpen">
       <template #content>
-        <div class="space-y-4 p-4 sm:p-6 max-h-screen overflow-y-auto">
+        <div class="space-y-4 p-4 sm:p-6 max-h-[85dvh] overflow-y-auto">
           <div class="flex items-start justify-between">
             <h3 class="text-lg font-medium">
               Editar compra
@@ -1008,7 +1008,7 @@ const diffRows = computed<RowDiff[]>(() => {
       <template #content>
         <div
           v-if="selectedPurchase && selectedComparison"
-          class="space-y-3 p-4 sm:p-5"
+          class="space-y-3 p-4 sm:p-5 max-h-[85dvh] overflow-y-auto"
         >
           <div class="flex items-start justify-between gap-3">
             <h3 class="font-medium">

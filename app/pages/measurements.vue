@@ -166,7 +166,7 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
     <!-- Add Measurement Modal -->
     <UModal v-model:open="isAddMeasurementDialogOpen">
       <template #content>
-        <div class="space-y-4 p-4 sm:p-6">
+        <div class="space-y-4 p-4 sm:p-6 max-h-[85dvh] overflow-y-auto">
           <div>
             <h3 class="text-lg font-medium">
               Añadir medida
