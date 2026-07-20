@@ -162,6 +162,18 @@
               </p>
             </div>
 
+            <div class="rounded-2xl bg-elevated p-5 ring ring-default lg:p-6">
+              <p class="text-xs font-medium uppercase tracking-wide text-muted">
+                ID de usuario
+              </p>
+              <p class="mt-2 wrap-break-word font-mono text-sm tracking-tight">
+                {{ userId }}
+              </p>
+              <p class="mt-2 text-xs text-muted">
+                Usa este ID para pruebas y soporte técnico.
+              </p>
+            </div>
+
             <UAlert
               v-if="isNearLimit"
               class="mt-5"
@@ -329,6 +341,7 @@ interface AccountResponse {
 
 const route = useRoute()
 const requestFetch = useRequestFetch()
+const { user } = useUserSession()
 
 const createDefaultProfile = (): UserProfile => ({
   tier: 'free',
@@ -377,6 +390,7 @@ onMounted(() => {
 
 const profile = computed(() => accountData.value?.profile ?? createDefaultProfile())
 const tiers = computed(() => accountData.value?.tiers ?? createDefaultTiers())
+const userId = computed(() => user.value?.id ?? 'N/A')
 const pageErrorMessage = computed(() => {
   if (!hasFetched.value || !accountError.value) {
     return ''
