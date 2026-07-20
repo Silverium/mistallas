@@ -54,7 +54,7 @@ export default eventHandler(async (event) => {
   if (!snapshot) {
     throw createError({
       statusCode: 404,
-      message: 'Purchase measurement snapshot not found'
+      message: 'La compra registrada no tiene unas medidas corporales asociadas. Actualiza tus medidas corporales para que podamos hacer la comparación.'
     })
   }
 

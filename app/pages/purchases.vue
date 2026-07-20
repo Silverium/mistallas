@@ -39,6 +39,7 @@ type ComparisonResult = {
       delta: number | null
     }
   }
+  error?: string
 }
 
 type PurchasePhoto = {
@@ -249,8 +250,11 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
     selectedComparison.value = data
     selectedPurchase.value = purchase
   },
-  onError() {
-    toast.add({ title: 'No se pudo generar la comparación.', color: 'error' })
+  onError(err, purchase) {
+    selectedComparison.value = {
+      error: getSpanishApiErrorMessage(err) ?? 'No se pudo generar la comparación.'
+    }
+    selectedPurchase.value = purchase
   }
 })
 
@@ -1057,67 +1061,86 @@ const diffRows = computed<RowDiff[]>(() => {
           </div>
 
           <UAlert
-            v-if="selectedComparison.highlights?.weight"
+            v-if="selectedComparison.error"
+            color="error"
+            variant="soft"
+            icon="i-lucide-alert-circle"
+            :title="selectedComparison.error"
+          />
+
+          <UAlert
+            v-else-if="selectedComparison.highlights?.weight"
             color="primary"
             variant="subtle"
             icon="i-lucide-scale"
             :title="selectedComparison.highlights.weight"
           />
 
-          <div
-            v-if="diffRows.length"
-            class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800"
-          >
-            <table class="min-w-full text-sm">
-              <thead class="bg-gray-50 dark:bg-gray-900/40">
-                <tr>
-                  <th class="text-left px-3 py-2 font-medium">
-                    Medida
-                  </th>
-                  <th class="text-left px-3 py-2 font-medium">
-                    Antes
-                  </th>
-                  <th class="text-left px-3 py-2 font-medium">
-                    Ahora
-                  </th>
-                  <th class="text-left px-3 py-2 font-medium">
-                    Cambio
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="row in diffRows"
-                  :key="row.key"
-                  class="border-t border-gray-200 dark:border-gray-800"
-                >
-                  <td class="px-3 py-2 font-medium">
-                    {{ row.label }}
-                  </td>
-                  <td class="px-3 py-2">
-                    {{ fmt(row.before, row.unit) }}
-                  </td>
-                  <td class="px-3 py-2">
-                    {{ fmt(row.now, row.unit) }}
-                  </td>
-                  <td
-                    class="px-3 py-2"
-                    :class="row.delta > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'"
-                  >
-                    {{ row.delta > 0 ? '+' : '' }}{{ fmt(row.delta, row.unit) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <template v-if="!selectedComparison.error">
+            <UAlert
+              v-if="!selectedComparison.snapshotAtPurchase"
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-info"
+              title="No hay medidas registradas para el día de la compra."
+              description="Registra medidas regulares para comparar cómo ha cambiado tu cuerpo después de cada compra."
+            />
 
-          <UAlert
-            v-else
-            color="neutral"
-            variant="soft"
-            icon="i-lucide-check"
-            title="No hay cambios de medidas corporales entre el día de la compra y tus medidas actuales."
-          />
+            <div
+              v-else-if="diffRows.length"
+              class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800"
+            >
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-900/40">
+                  <tr>
+                    <th class="text-left px-3 py-2 font-medium">
+                      Medida
+                    </th>
+                    <th class="text-left px-3 py-2 font-medium">
+                      Antes
+                    </th>
+                    <th class="text-left px-3 py-2 font-medium">
+                      Ahora
+                    </th>
+                    <th class="text-left px-3 py-2 font-medium">
+                      Cambio
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in diffRows"
+                    :key="row.key"
+                    class="border-t border-gray-200 dark:border-gray-800"
+                  >
+                    <td class="px-3 py-2 font-medium">
+                      {{ row.label }}
+                    </td>
+                    <td class="px-3 py-2">
+                      {{ fmt(row.before, row.unit) }}
+                    </td>
+                    <td class="px-3 py-2">
+                      {{ fmt(row.now, row.unit) }}
+                    </td>
+                    <td
+                      class="px-3 py-2"
+                      :class="row.delta > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    >
+                      {{ row.delta > 0 ? '+' : '' }}{{ fmt(row.delta, row.unit) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <UAlert
+              v-else
+              color="neutral"
+              variant="soft"
+              icon="i-lucide-check"
+              title="No hay cambios de medidas corporales entre el día de la compra y tus medidas actuales."
+            />
+          </template>
 
           <div class="flex justify-between w-full">
             <UButton
