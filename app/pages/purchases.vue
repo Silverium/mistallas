@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { purchasesQuery } from '~/queries/purchases'
+import { purchasesPageQuery } from '~/queries/purchases'
 import { getSpanishApiErrorMessage, isNuxtZodError } from '~/utils/errors'
 import { blobToBase64, compressImage } from '~/utils/image-compression'
 import { measurementSpecs } from '~/utils/measurementSpecs'
@@ -94,9 +94,29 @@ type RowDiff = {
 
 const { loggedIn } = useUserSession()
 
-const { data: purchases } = useQuery({
-  ...purchasesQuery,
+const currentPage = ref(1)
+const pageSize = ref(20)
+
+const currentPageQuery = computed(() => purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
+
+const { data: purchasesResponse } = useQuery({
+  get key() {
+    return currentPageQuery.value.key
+  },
+  get query() {
+    return currentPageQuery.value.query
+  },
   enabled: () => loggedIn.value
+})
+
+watch(() => currentPage.value, () => {
+  // Scroll to top when page changes
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}, { immediate: false })
+
+watch(() => historyFilter.value, () => {
+  // Reset to page 1 when search term changes
+  currentPage.value = 1
 })
 
 const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
@@ -113,7 +133,7 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
     }
   }),
   async onSuccess(data: { purchase: Purchase }) {
-    await queryCache.invalidateQueries(purchasesQuery)
+    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value))
 
     // Upload pending photos after purchase is created
     if (pendingPhotosToUpload.value.length > 0) {
@@ -153,7 +173,7 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
     }
   }),
   async onSuccess(data: Purchase) {
-    await queryCache.invalidateQueries(purchasesQuery)
+    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value))
 
     // Upload pending photos after purchase is updated
     if (pendingPhotosToUpload.value.length > 0) {
@@ -184,7 +204,7 @@ const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
     method: 'DELETE'
   }),
   async onSuccess(_deleted, purchase) {
-    await queryCache.invalidateQueries(purchasesQuery)
+    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value))
 
     if (selectedPurchase.value?.id === purchase.id) {
       selectedPurchase.value = null
@@ -309,7 +329,7 @@ const uploadPendingPhotos = async (purchaseId: number) => {
     }
 
     // After all uploads succeed, refresh and notify
-    await queryCache.invalidateQueries(purchasesQuery)
+    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
     if (pendingPhotosToUpload.value.length === 1) {
       toast.add({ title: 'Foto subida' })
     }
@@ -352,7 +372,7 @@ const onPhotoInputChange = async (event: Event) => {
         }
       })
 
-      await queryCache.invalidateQueries(purchasesQuery)
+      await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
       toast.add({ title: 'Foto subida' })
       await refreshPhotos()
     }
@@ -379,7 +399,7 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
     await requestFetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
       method: 'DELETE'
     })
-    await queryCache.invalidateQueries(purchasesQuery)
+    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
 
     if (selectedPreviewPurchase.value?.id === purchaseId && selectedPreviewSlot.value === slot) {
       const nextSlot = (selectedPreviewPurchase.value.photoSlots ?? []).filter(currentSlot => currentSlot !== slot)[0]
@@ -398,7 +418,9 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
   }
 }
 
-const purchaseList = computed(() => (purchases.value ?? []) as Purchase[])
+const purchaseList = computed(() => (purchasesResponse.value?.purchases ?? []) as Purchase[])
+
+const pagination = computed(() => purchasesResponse.value?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 1 })
 
 const isSubmitting = computed(() => addingPurchase.value || editingPurchase.value)
 
@@ -491,26 +513,6 @@ const confirmAndDelete = (purchase: Purchase) => {
   removePurchase(purchase)
 }
 
-const filteredPurchaseList = computed(() => {
-  const term = historyFilter.value.trim().toLowerCase()
-  if (!term) {
-    return purchaseList.value
-  }
-
-  return purchaseList.value.filter((purchase) => {
-    const haystack = [
-      purchase.brand,
-      purchase.category,
-      purchase.productType,
-      purchase.sizeLabel,
-      purchase.fitFeedback,
-      purchase.notes
-    ].filter(Boolean).join(' ').toLowerCase()
-
-    return haystack.includes(term)
-  })
-})
-
 const filteredPhotoList = computed(() => (photoList.value ?? []) as PurchasePhoto[])
 
 const pendingPhotosPreviews = computed<PendingPhotoPreview[]>(() => {
@@ -532,6 +534,18 @@ const fmt = (value: number, unit: string) => `${value.toFixed(1)} ${unit}`
 
 const canAddMorePhotos = (purchase: Purchase) => {
   return (purchase.photoSlots?.length ?? 0) < 3
+}
+
+const goToPage = (page: number) => {
+  currentPage.value = Math.max(1, Math.min(page, pagination.value.totalPages))
+}
+
+const goToPreviousPage = () => {
+  goToPage(currentPage.value - 1)
+}
+
+const goToNextPage = () => {
+  goToPage(currentPage.value + 1)
 }
 
 const diffRows = computed<RowDiff[]>(() => {
@@ -612,7 +626,7 @@ const diffRows = computed<RowDiff[]>(() => {
       />
       <ul class="divide-y divide-gray-200 dark:divide-gray-800">
         <li
-          v-for="purchase in filteredPurchaseList"
+          v-for="purchase in purchaseList"
           :key="purchase.id"
           class="py-3 space-y-3"
         >
@@ -696,11 +710,41 @@ const diffRows = computed<RowDiff[]>(() => {
         </li>
       </ul>
       <p
-        v-if="!filteredPurchaseList.length"
+        v-if="!purchaseList.length"
         class="text-sm text-muted"
       >
         No hay compras que coincidan con el filtro.
       </p>
+
+      <!-- Pagination Controls -->
+      <div
+        v-if="pagination.totalPages > 1"
+        class="mt-6 flex items-center justify-between gap-4"
+      >
+        <div class="text-sm text-muted">
+          Página {{ pagination.page }} de {{ pagination.totalPages }} · {{ pagination.total }} compras
+        </div>
+        <div class="flex gap-2">
+          <UButton
+            variant="outline"
+            color="neutral"
+            icon="i-lucide-chevron-left"
+            :disabled="pagination.page <= 1"
+            @click="goToPreviousPage"
+          >
+            Anterior
+          </UButton>
+          <UButton
+            variant="outline"
+            color="neutral"
+            icon="i-lucide-chevron-right"
+            :disabled="pagination.page >= pagination.totalPages"
+            @click="goToNextPage"
+          >
+            Siguiente
+          </UButton>
+        </div>
+      </div>
     </div>
 
     <!-- Add/Edit Purchase Dialog -->

@@ -25,9 +25,18 @@ export const purchasesQuery = defineQueryOptions({
   query: () => useRequestFetch()('/api/purchases') as Promise<PurchasesPaginatedResponse>
 })
 
-export const purchasesPageQuery = (page: number = 1, limit: number = 20) => defineQueryOptions({
-  key: ['purchases', page, limit],
-  query: () => useRequestFetch()(`/api/purchases?page=${page}&limit=${limit}`) as Promise<PurchasesPaginatedResponse>
+export const purchasesPageQuery = (page: number = 1, limit: number = 20, search: string = '') => defineQueryOptions({
+  key: ['purchases', page, limit, search],
+  query: () => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit)
+    })
+    if (search.trim()) {
+      params.append('search', search.trim())
+    }
+    return useRequestFetch()(`/api/purchases?${params.toString()}`) as Promise<PurchasesPaginatedResponse>
+  }
 })
 
 export const purchaseComparisonQuery = (purchaseId: number) => defineQueryOptions({

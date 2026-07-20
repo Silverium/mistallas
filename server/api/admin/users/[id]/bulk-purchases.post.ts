@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { useValidatedBody, z } from 'h3-zod'
 import { requireAdminAccess } from '../../../../utils/admin'
 import { tables, useDB } from '../../../../utils/db'
+import { encodeMeasurementInsert } from '../../../../utils/measurements'
 
 export default eventHandler(async (event) => {
   await requireAdminAccess(event)
@@ -44,8 +45,10 @@ export default eventHandler(async (event) => {
       .values({
         userId,
         recordedAt: new Date(),
-        weightKg: 7000, // 70 kg as stored (x100)
-        heightCm: 1800, // 180 cm as stored (x10)
+        ...encodeMeasurementInsert({
+          weightKg: 70,
+          heightCm: 180
+        }),
         source: 'admin_bulk_test',
         notes: 'Auto-created for bulk purchase testing'
       })
