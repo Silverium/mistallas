@@ -1,6 +1,6 @@
 import { and, eq, inArray, desc } from 'drizzle-orm'
 import { useValidatedQuery, z } from 'h3-zod'
-import { calculatePurchaseSearchScore } from '../../utils/fuzzy-search'
+import { calculateMultiWordSearchScore } from '../../utils/fuzzy-search'
 import { tables, useDB } from '../../utils/db'
 
 export default eventHandler(async (event) => {
@@ -25,11 +25,11 @@ export default eventHandler(async (event) => {
   // Filter by search term if provided (using fuzzy search)
   let filtered = purchases
   if (query.search?.trim()) {
-    const searchTerm = query.search.trim()
+    const words = query.search.trim().split(/\s+/).filter(Boolean)
     filtered = purchases
       .map(purchase => ({
         purchase,
-        score: calculatePurchaseSearchScore(purchase, searchTerm)
+        score: calculateMultiWordSearchScore(purchase, words)
       }))
       .filter(item => item.score >= 0.2) // Only include matches with score >= 0.2
       .sort((a, b) => b.score - a.score) // Sort by relevance

@@ -83,3 +83,32 @@ export function calculatePurchaseSearchScore(
 
   return scores.reduce((sum, score) => sum + score, 0)
 }
+
+/**
+ * Calculate fuzzy match score for a purchase against multiple search words.
+ * Words earlier in the array carry more weight (first word = highest priority).
+ */
+export function calculateMultiWordSearchScore(
+  purchase: {
+    brand?: string | null
+    category?: string | null
+    productType?: string | null
+    sizeLabel?: string | null
+    fitFeedback?: string | null
+    notes?: string | null
+  },
+  words: string[]
+): number {
+  if (words.length === 0) return 1
+  if (words.length === 1) return calculatePurchaseSearchScore(purchase, words[0])
+
+  // Assign decreasing weights to words: first word gets the most weight.
+  // Weights follow a geometric decay: [0.5, 0.25, 0.125, ...] normalised to sum 1.
+  const rawWeights = words.map((_, i) => Math.pow(0.5, i))
+  const total = rawWeights.reduce((s, w) => s + w, 0)
+  const wordWeights = rawWeights.map(w => w / total)
+
+  return words.reduce((sum, word, i) => {
+    return sum + calculatePurchaseSearchScore(purchase, word) * wordWeights[i]
+  }, 0)
+}
