@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
-import { createImage } from './helpers/createImage'
+import { createImageFile } from './helpers/createImage'
 import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
 
 async function createPurchase(page: Page, purchase: {
@@ -36,11 +36,7 @@ async function addPhotoToPurchaseRow(row: ReturnType<Page['locator']>, page: Pag
   const fileChooserPromise = page.waitForEvent('filechooser')
   await row.getByLabel('Añadir foto').first().click()
   const fileChooser = await fileChooserPromise
-  await fileChooser.setFiles({
-    name: `photo-${Date.now()}.png`,
-    mimeType: 'image/png',
-    buffer: createImage()
-  })
+  await fileChooser.setFiles(createImageFile())
 }
 
 async function expectButtonIconToBeRendered(button: ReturnType<Page['locator']>) {
