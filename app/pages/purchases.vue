@@ -102,6 +102,8 @@ const isAddPurchaseDialogOpen = ref(false)
 const isEditPurchaseDialogOpen = ref(false)
 const isDeletePurchaseDialogOpen = ref(false)
 const pendingDeletionPurchase = ref<Purchase | null>(null)
+const isDeletePhotoDialogOpen = ref(false)
+const pendingDeletionPhoto = ref<{ purchaseId: number, slot: number } | null>(null)
 
 type PendingPhotoPreview = {
   id: string
@@ -1256,9 +1258,24 @@ const onPhotoInputChange = async (event: Event) => {
   input.value = ''
 }
 
-const deletePhoto = async (purchaseId: number, slot: number) => {
-  if (!confirm('¿Eliminar esta foto?')) return
+const openDeletePhotoDialog = (purchaseId: number, slot: number) => {
+  pendingDeletionPhoto.value = { purchaseId, slot }
+  isDeletePhotoDialogOpen.value = true
+}
 
+const closeDeletePhotoDialog = () => {
+  isDeletePhotoDialogOpen.value = false
+  pendingDeletionPhoto.value = null
+}
+
+const confirmDeletePhoto = async () => {
+  if (!pendingDeletionPhoto.value) return
+  const { purchaseId, slot } = pendingDeletionPhoto.value
+  closeDeletePhotoDialog()
+  await deletePhoto(purchaseId, slot)
+}
+
+const deletePhoto = async (purchaseId: number, slot: number) => {
   try {
     await offlineFetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
       method: 'DELETE'
@@ -2109,7 +2126,7 @@ const diffRows = computed<RowDiff[]>(() => {
                       variant="solid"
                       icon="i-lucide-x"
                       size="xs"
-                      @click="deletePhoto(editingPurchaseId!, item.slot)"
+                      @click="openDeletePhotoDialog(editingPurchaseId!, item.slot)"
                     />
                   </div>
 
@@ -2200,6 +2217,39 @@ const diffRows = computed<RowDiff[]>(() => {
               color="neutral"
               variant="soft"
               @click="closeDeletePurchaseDialog"
+            >
+              Cancelar
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <UModal v-model:open="isDeletePhotoDialogOpen">
+      <template #content>
+        <div class="space-y-4 p-4 sm:p-6">
+          <h3 class="text-lg font-medium">
+            Confirmar eliminación
+          </h3>
+
+          <p class="text-sm text-muted">
+            ¿Seguro que quieres eliminar esta foto?
+          </p>
+
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              type="button"
+              color="error"
+              icon="i-lucide-trash"
+              @click="confirmDeletePhoto"
+            >
+              Eliminar
+            </UButton>
+            <UButton
+              type="button"
+              color="neutral"
+              variant="soft"
+              @click="closeDeletePhotoDialog"
             >
               Cancelar
             </UButton>
