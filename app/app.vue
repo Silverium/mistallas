@@ -72,7 +72,6 @@ const items = computed(() => {
 const userDisplayName = computed(() => user.value?.login || user.value?.email || 'Usuario')
 
 const toast = useToast()
-let wasOffline = false
 const { isOnline: onlineStatus, pendingCount: count } = useNetworkStatus()
 const isOnline = computed(() => onlineStatus.value)
 const pendingCount = computed(() => count.value)
@@ -88,18 +87,6 @@ const showOfflineDetails = () => {
     color: 'warning'
   })
 }
-
-watch(onlineStatus, (val) => {
-  if (val && wasOffline) {
-    toast.add({
-      title: 'Vuelves a tener conexión',
-      color: 'success',
-      icon: 'i-lucide-check-circle',
-      duration: 2000
-    })
-  }
-  wasOffline = !val
-}, { immediate: true })
 
 const userAvatar = computed(() => {
   if (!user.value) {

@@ -323,6 +323,7 @@ export function useNetworkStatus() {
   const queryCache = useQueryCache()
   const toast = useToast()
   const hadBeenOffline = ref(false)
+  const observedOfflineSignal = ref(false)
   const isFlushing = ref(false)
   const flushRetryTimer = ref<number | null>(null)
   const onlineWatchdogTimer = ref<number | null>(null)
@@ -438,6 +439,7 @@ export function useNetworkStatus() {
   }
 
   const handleBrowserOffline = () => {
+    observedOfflineSignal.value = true
     notifyServiceWorkerNetworkHint(false)
     applyBrowserOnlineState(false)
   }
@@ -449,6 +451,7 @@ export function useNetworkStatus() {
     }
 
     if (payload.type === 'NETWORK_OFFLINE') {
+      observedOfflineSignal.value = true
       applyBrowserOnlineState(false)
       return
     }
@@ -459,6 +462,9 @@ export function useNetworkStatus() {
     }
 
     if (payload.type === 'NETWORK_STATUS' && typeof payload.online === 'boolean') {
+      if (!payload.online) {
+        observedOfflineSignal.value = true
+      }
       applyBrowserOnlineState(payload.online)
     }
   }
@@ -486,13 +492,14 @@ export function useNetworkStatus() {
       return
     }
 
-    if (shouldAnnounceReconnection({
+    if (observedOfflineSignal.value && shouldAnnounceReconnection({
       online,
       wasOnline,
       hadBeenOffline: hadBeenOffline.value
     })) {
       toast.add({ title: 'Conexión restablecida.' })
       hadBeenOffline.value = false
+      observedOfflineSignal.value = false
 
       // Refresh core cached lists on reconnect even when no queued mutations
       // were pending, so offline screens repopulate from live API immediately.
@@ -530,7 +537,6 @@ export function useNetworkStatus() {
   onMounted(async () => {
     if (import.meta.client) {
       applyBrowserOnlineState(navigator.onLine)
-      notifyServiceWorkerNetworkHint(navigator.onLine)
       window.addEventListener('online', handleBrowserOnline)
       window.addEventListener('offline', handleBrowserOffline)
 
