@@ -3,6 +3,7 @@ import type { QueuedMutation } from './useOfflineQueue'
 import type { PendingPhoto } from './usePendingPhotosStore'
 import { useOfflineQueueStore } from './useOfflineQueue'
 import { usePendingPhotosStore } from './usePendingPhotosStore'
+import { usePendingPurchasesStore } from './usePendingPurchasesStore'
 
 type OfflineQueueLike = {
   queue: QueuedMutation[]
@@ -20,7 +21,9 @@ type SyncRequestOptions = {
 }
 
 const FLUSH_RETRY_MS = 3000
-const ONLINE_WATCHDOG_MS = 2500
+const RECOVERY_BACKOFF_BASE_MS = 1000
+const RECOVERY_BACKOFF_MAX_MS = 30_000
+const RECOVERY_RETRY_LIMIT = 6
 
 export function shouldAnnounceReconnection({
   online,
@@ -187,7 +190,9 @@ export async function flushOfflineWork({
 
       // Drop unrecoverable client errors so they don't block the rest of the
       // queue forever (e.g. stale edits/deletes). Continue processing.
-      if (status != null && status >= 400 && status < 500) {
+      // Keep auth-related statuses retryable because they can be transient
+      // during reconnect/session restoration races.
+      if (status != null && status >= 400 && status < 500 && status !== 401 && status !== 403) {
         offlineQueue.dequeue(entry.id)
         droppedMutations++
         continue
@@ -320,14 +325,34 @@ export function useNetworkStatus() {
   const offlineData = useOfflineDataStore()
   const offlineQueue = useOfflineQueueStore()
   const pendingPhotos = usePendingPhotosStore()
+  const pendingPurchases = usePendingPurchasesStore()
   const queryCache = useQueryCache()
   const toast = useToast()
   const hadBeenOffline = ref(false)
   const observedOfflineSignal = ref(false)
   const isFlushing = ref(false)
   const flushRetryTimer = ref<number | null>(null)
-  const onlineWatchdogTimer = ref<number | null>(null)
-  const queuedWorkCount = computed(() => offlineQueue.queue.length + pendingPhotos.pendingPhotos.length)
+  const recoveryRetryTimer = ref<number | null>(null)
+  const recoveryRetryAttempt = ref(0)
+  const queuedWorkCount = computed(() => {
+    return offlineQueue.queue.length
+      + pendingPhotos.pendingPhotos.length
+      + pendingPurchases.pendingPurchases.length
+  })
+  const connectivitySignalVersion = ref(0)
+
+  async function getServiceWorkerTarget() {
+    if (!import.meta.client || !('serviceWorker' in navigator)) {
+      return null
+    }
+
+    if (navigator.serviceWorker.controller) {
+      return navigator.serviceWorker.controller
+    }
+
+    const registration = await navigator.serviceWorker.ready.catch(() => null)
+    return registration?.active ?? null
+  }
 
   // Hydration guard: SSR initializes this state as `true` (no navigator on server).
   // On client refresh while offline, correct it synchronously during setup so the
@@ -369,44 +394,88 @@ export function useNetworkStatus() {
     }, FLUSH_RETRY_MS)
   }
 
-  const clearOnlineWatchdog = () => {
+  const hasPendingWork = () => {
+    return offlineQueue.queue.length > 0
+      || pendingPhotos.pendingPhotos.length > 0
+      || pendingPurchases.pendingPurchases.length > 0
+  }
+
+  const clearRecoveryRetry = () => {
     if (!import.meta.client) {
       return
     }
 
-    if (onlineWatchdogTimer.value != null) {
-      window.clearTimeout(onlineWatchdogTimer.value)
-      onlineWatchdogTimer.value = null
+    if (recoveryRetryTimer.value != null) {
+      window.clearTimeout(recoveryRetryTimer.value)
+      recoveryRetryTimer.value = null
     }
   }
 
-  const scheduleOnlineWatchdog = () => {
+  const resetRecoveryBackoff = () => {
+    recoveryRetryAttempt.value = 0
+    clearRecoveryRetry()
+  }
+
+  const scheduleRecoveryRetry = () => {
     if (!import.meta.client) {
+      return
+    }
+
+    if (!hasPendingWork()) {
+      resetRecoveryBackoff()
+      return
+    }
+
+    if (recoveryRetryTimer.value != null) {
+      return
+    }
+
+    if (recoveryRetryAttempt.value >= RECOVERY_RETRY_LIMIT) {
+      return
+    }
+
+    const delay = Math.min(
+      RECOVERY_BACKOFF_BASE_MS * 2 ** recoveryRetryAttempt.value,
+      RECOVERY_BACKOFF_MAX_MS
+    )
+
+    recoveryRetryTimer.value = window.setTimeout(async () => {
+      recoveryRetryTimer.value = null
+      recoveryRetryAttempt.value += 1
+      await attemptRecovery('backoff')
+    }, delay)
+  }
+
+  const attemptRecovery = async (_reason: 'event' | 'backoff' | 'focus') => {
+    if (!import.meta.client) {
+      return
+    }
+
+    if (!hasPendingWork()) {
+      resetRecoveryBackoff()
       return
     }
 
     if (!isOnline.value) {
-      clearOnlineWatchdog()
-      return
-    }
-
-    if (onlineWatchdogTimer.value != null) {
-      return
-    }
-
-    onlineWatchdogTimer.value = window.setTimeout(async () => {
-      onlineWatchdogTimer.value = null
-
-      if (shouldFlushWhenWorkAppears({
-        online: isOnline.value,
-        remainingQueue: offlineQueue.queue.length,
-        remainingPending: pendingPhotos.pendingPhotos.length
-      })) {
-        await flushQueue()
+      try {
+        const probeUrl = `/api/ping?_connectivityProbe=${Date.now()}`
+        await $fetch(probeUrl)
+        applyBrowserOnlineState(true)
       }
+      catch {
+        scheduleRecoveryRetry()
+        return
+      }
+    }
 
-      scheduleOnlineWatchdog()
-    }, ONLINE_WATCHDOG_MS)
+    await flushQueue()
+
+    if (hasPendingWork()) {
+      scheduleRecoveryRetry()
+    }
+    else {
+      resetRecoveryBackoff()
+    }
   }
 
   const applyBrowserOnlineState = (online: boolean) => {
@@ -417,31 +486,32 @@ export function useNetworkStatus() {
     globalOnlineState.value = online
   }
 
-  const notifyServiceWorkerNetworkHint = (online: boolean) => {
-    if (!import.meta.client || !('serviceWorker' in navigator)) {
+  const notifyServiceWorkerNetworkHint = async (online: boolean) => {
+    const worker = await getServiceWorkerTarget()
+    if (!worker) {
       return
     }
 
-    const controller = navigator.serviceWorker.controller
-    if (!controller) {
-      return
-    }
-
-    controller.postMessage({
+    worker.postMessage({
       type: 'CLIENT_NETWORK_HINT',
       online
     })
   }
 
   const handleBrowserOnline = () => {
-    notifyServiceWorkerNetworkHint(true)
+    connectivitySignalVersion.value += 1
+    void notifyServiceWorkerNetworkHint(true)
     applyBrowserOnlineState(true)
+    resetRecoveryBackoff()
+    void attemptRecovery('event')
   }
 
   const handleBrowserOffline = () => {
+    connectivitySignalVersion.value += 1
     observedOfflineSignal.value = true
-    notifyServiceWorkerNetworkHint(false)
+    void notifyServiceWorkerNetworkHint(false)
     applyBrowserOnlineState(false)
+    scheduleRecoveryRetry()
   }
 
   const handleServiceWorkerMessage = (event: MessageEvent) => {
@@ -453,11 +523,14 @@ export function useNetworkStatus() {
     if (payload.type === 'NETWORK_OFFLINE') {
       observedOfflineSignal.value = true
       applyBrowserOnlineState(false)
+      scheduleRecoveryRetry()
       return
     }
 
     if (payload.type === 'NETWORK_ONLINE') {
       applyBrowserOnlineState(true)
+      resetRecoveryBackoff()
+      void attemptRecovery('event')
       return
     }
 
@@ -469,26 +542,50 @@ export function useNetworkStatus() {
     }
   }
 
-  const requestServiceWorkerNetworkStatus = () => {
-    if (!import.meta.client || !('serviceWorker' in navigator)) {
+  const requestServiceWorkerNetworkStatus = async () => {
+    const worker = await getServiceWorkerTarget()
+    if (!worker) {
       return
     }
 
-    const controller = navigator.serviceWorker.controller
-    if (!controller) {
-      return
-    }
-
+    const signalVersionAtRequest = connectivitySignalVersion.value
     const channel = new MessageChannel()
-    channel.port1.onmessage = handleServiceWorkerMessage
-    controller.postMessage({ type: 'GET_NETWORK_STATUS' }, [channel.port2])
+    channel.port1.onmessage = (event) => {
+      const payload = event.data as { type?: string } | undefined
+      if (payload?.type === 'NETWORK_STATUS' && signalVersionAtRequest !== connectivitySignalVersion.value) {
+        return
+      }
+
+      handleServiceWorkerMessage(event)
+    }
+    worker.postMessage({ type: 'GET_NETWORK_STATUS' }, [channel.port2])
+  }
+
+  const handleServiceWorkerControllerChange = () => {
+    void requestServiceWorkerNetworkStatus()
+  }
+
+  const handleVisibilityRecovery = () => {
+    if (!import.meta.client) {
+      return
+    }
+
+    if (document.visibilityState !== 'visible') {
+      return
+    }
+
+    void attemptRecovery('focus')
+  }
+
+  const handleWindowFocusRecovery = () => {
+    void attemptRecovery('focus')
   }
 
   watch(globalOnlineState, async (online, wasOnline) => {
     if (!online) {
       clearFlushRetry()
-      clearOnlineWatchdog()
       hadBeenOffline.value = true
+      scheduleRecoveryRetry()
       return
     }
 
@@ -510,12 +607,12 @@ export function useNetworkStatus() {
     if (shouldFlushWhenWorkAppears({
       online,
       remainingQueue: offlineQueue.queue.length,
-      remainingPending: pendingPhotos.pendingPhotos.length
+      remainingPending: pendingPhotos.pendingPhotos.length + pendingPurchases.pendingPurchases.length
     })) {
       await flushQueue()
     }
 
-    scheduleOnlineWatchdog()
+    resetRecoveryBackoff()
   })
 
   // Handle race conditions where work is queued shortly AFTER we are already
@@ -524,12 +621,14 @@ export function useNetworkStatus() {
     if (shouldFlushWhenWorkAppears({
       online: isOnline.value,
       remainingQueue: offlineQueue.queue.length,
-      remainingPending: pendingPhotos.pendingPhotos.length
+      remainingPending: pendingPhotos.pendingPhotos.length + pendingPurchases.pendingPurchases.length
     })) {
       await flushQueue()
     }
 
-    scheduleOnlineWatchdog()
+    if (hasPendingWork()) {
+      void attemptRecovery('event')
+    }
   })
 
   // Flush on mount in case the device was offline during a previous session
@@ -539,22 +638,27 @@ export function useNetworkStatus() {
       applyBrowserOnlineState(navigator.onLine)
       window.addEventListener('online', handleBrowserOnline)
       window.addEventListener('offline', handleBrowserOffline)
+      window.addEventListener('focus', handleWindowFocusRecovery)
+      document.addEventListener('visibilitychange', handleVisibilityRecovery)
 
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage)
-        requestServiceWorkerNetworkStatus()
+        navigator.serviceWorker.addEventListener('controllerchange', handleServiceWorkerControllerChange)
+        void requestServiceWorkerNetworkStatus()
       }
     }
 
     if (shouldFlushWhenWorkAppears({
       online: isOnline.value,
       remainingQueue: offlineQueue.queue.length,
-      remainingPending: pendingPhotos.pendingPhotos.length
+      remainingPending: pendingPhotos.pendingPhotos.length + pendingPurchases.pendingPurchases.length
     })) {
       await flushQueue()
     }
 
-    scheduleOnlineWatchdog()
+    if (hasPendingWork()) {
+      void attemptRecovery('event')
+    }
   })
 
   onBeforeUnmount(() => {
@@ -564,10 +668,15 @@ export function useNetworkStatus() {
 
     window.removeEventListener('online', handleBrowserOnline)
     window.removeEventListener('offline', handleBrowserOffline)
+    window.removeEventListener('focus', handleWindowFocusRecovery)
+    document.removeEventListener('visibilitychange', handleVisibilityRecovery)
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
+      navigator.serviceWorker.removeEventListener('controllerchange', handleServiceWorkerControllerChange)
     }
+
+    clearRecoveryRetry()
   })
 
   async function flushQueue() {
@@ -592,11 +701,17 @@ export function useNetworkStatus() {
       isFlushing.value = false
     }
 
-    const progressMade = result.syncedMutations > 0 || result.uploadedFromPendingStore > 0 || result.droppedMutations > 0
+    if (!isOnline.value && (result.syncedMutations > 0 || result.uploadedFromPendingStore > 0)) {
+      applyBrowserOnlineState(true)
+    }
+
+    const progressMade = result.syncedMutations > 0
+      || result.uploadedFromPendingStore > 0
+      || result.droppedMutations > 0
     if (shouldScheduleFlushRetry({
       online: isOnline.value,
       remainingQueue: offlineQueue.queue.length,
-      remainingPending: pendingPhotos.pendingPhotos.length,
+      remainingPending: pendingPhotos.pendingPhotos.length + pendingPurchases.pendingPurchases.length,
       progressMade
     })) {
       scheduleFlushRetry()
@@ -605,7 +720,12 @@ export function useNetworkStatus() {
       clearFlushRetry()
     }
 
-    scheduleOnlineWatchdog()
+    if (hasPendingWork()) {
+      scheduleRecoveryRetry()
+    }
+    else {
+      resetRecoveryBackoff()
+    }
 
     if (progressMade) {
       applySyncedPhotoSlotsToOfflineCache(offlineData, result.syncedPhotoPurchaseIds)
@@ -634,6 +754,10 @@ export function useNetworkStatus() {
 
   return {
     isOnline,
-    pendingCount: computed(() => offlineQueue.queue.length + pendingPhotos.pendingPhotos.length)
+    pendingCount: computed(() => {
+      return offlineQueue.queue.length
+        + pendingPhotos.pendingPhotos.length
+        + pendingPurchases.pendingPurchases.length
+    })
   }
 }

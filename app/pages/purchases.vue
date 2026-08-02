@@ -140,7 +140,7 @@ const showScrollToTopButton = ref(false)
 
 const purchasesPage = 1
 const purchasesFetchLimit = 100
-const ONLINE_RECOVERY_RETRY_MS = 15_000
+const ONLINE_RECOVERY_RETRY_MS = 3_000
 
 const updateScrollToTopVisibility = () => {
   if (!import.meta.client) {
@@ -613,6 +613,7 @@ const applyConnectivityState = async (nextOffline: boolean) => {
 }
 
 const handleBrowserOffline = async () => {
+  globalOnlineState.value = false
   await applyConnectivityState(true)
 }
 
@@ -627,8 +628,13 @@ const handleBrowserOnline = async () => {
   }
 
   if (import.meta.client && !navigator.onLine) {
-    await applyConnectivityState(true)
-    return
+    try {
+      await requestFetch(`/api/ping?_connectivityProbe=${Date.now()}`)
+    }
+    catch {
+      await applyConnectivityState(true)
+      return
+    }
   }
 
   lastOnlineRecoveryAttemptAt.value = now
@@ -636,6 +642,7 @@ const handleBrowserOnline = async () => {
   isHandlingOnlineRecovery.value = true
 
   try {
+    globalOnlineState.value = true
     await applyConnectivityState(false)
 
     onlineRecoveryVersion.value += 1
@@ -684,9 +691,26 @@ onMounted(() => {
 
     connectivityPollTimer.value = window.setInterval(() => {
       const nextOffline = !navigator.onLine
+      const hasPendingSyncWork = pendingPurchases.pendingPurchases.length > 0
+        || pendingPhotos.pendingPhotos.length > 0
+        || offlineQueue.queue.length > 0
+
+      if (hasPendingSyncWork && !isHandlingOnlineRecovery.value && shouldRetryOnlineRecoveryNow()) {
+        void handleBrowserOnline()
+      }
 
       if (nextOffline) {
         needsOnlineRefetch.value = true
+
+        if (!isHandlingOnlineRecovery.value && shouldRetryOnlineRecoveryNow()) {
+          void requestFetch(`/api/ping?_connectivityProbe=${Date.now()}`)
+            .then(async () => {
+              await handleBrowserOnline()
+            })
+            .catch(() => {
+              // Still offline.
+            })
+        }
       }
 
       if (nextOffline === isClientOffline.value) {
