@@ -110,10 +110,14 @@ export default defineNuxtConfig({
     serverBundle: 'local'
   },
   pwa: {
-    registerType: 'autoUpdate',
-    experimental: {
-      enableWorkboxPayloadQueryParams: true
-    },
+    // Local kill switch: disable SW registration entirely.
+    disable: process.env.NUXT_DISABLE_PWA === 'true',
+    // One-shot cleanup mode: unregister active SW and delete caches.
+    selfDestroying: process.env.NUXT_PWA_SELF_DESTROY === 'true',
+    registerType: 'prompt',
+    strategies: 'injectManifest',
+    srcDir: 'public',
+    filename: 'sw.ts',
     manifest: {
       name: 'Mis Tallas',
       short_name: 'Mis Tallas',
@@ -138,110 +142,13 @@ export default defineNuxtConfig({
       image: 'public/favicon/favicon.svg',
       overrideManifestIcons: false
     },
-    workbox: {
-      // We use an explicit navigation runtime cache with a handlerDidError
-      // fallback to the cached `/` shell. This is more robust for this hybrid
-      // SSR + offline app than relying on Workbox's generic NavigationRoute.
-      navigateFallback: null,
-      skipWaiting: true,
-      clientsClaim: true,
-      cleanupOutdatedCaches: true,
+    injectManifest: {
       // Exclude the 2.9 MB heic-to WASM chunk from the SW precache.
       // It is a lazy (dynamic) import only used when uploading HEIC photos;
       // forcing it into the precache would cost every user 2.9 MB on first load.
       globIgnores: ['**/heic-to.*.js', '**/social-image.old.png'],
       maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
-      globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,json}'],
-      runtimeCaching: [
-        {
-          urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'navigation-cache',
-            networkTimeoutSeconds: 1,
-            expiration: { maxEntries: 20, maxAgeSeconds: 3600 },
-            cacheableResponse: { statuses: [0, 200] },
-            plugins: [
-              {
-                // Strip query params from navigation cache keys so that
-                // /purchases?filter=foo resolves to the same cached entry as
-                // /purchases. Navigation HTML is identical regardless of query
-                // params (routing/data fetching is handled client-side).
-                cacheKeyWillBeUsed: async ({ request }: { request: Request }) => {
-                  const url = new URL(request.url)
-                  return url.origin + url.pathname
-                },
-                handlerDidError: async () => {
-                  return await caches.match('/')
-                    || await caches.match('/index.html')
-                    || Response.error()
-                }
-              }
-            ]
-          }
-        },
-        // Cache web fonts so they are served instantly on repeat visits
-        {
-          urlPattern: /\.(?:woff2?|ttf|otf|eot)$/,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'fonts-cache',
-            expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            cacheableResponse: { statuses: [0, 200] }
-          }
-        },
-        {
-          urlPattern: /\/api\/purchases/,
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'api-purchases',
-            networkTimeoutSeconds: 5,
-            expiration: { maxEntries: 200, maxAgeSeconds: 604800 },
-            cacheableResponse: { statuses: [0, 200] }
-          }
-        },
-        // Cache purchase photo images aggressively - they should always be available offline
-        {
-          urlPattern: /\/api\/purchases\/\d+\/photos\/\d+$/,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'purchase-photos',
-            expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            cacheableResponse: { statuses: [0, 200] }
-          }
-        },
-        {
-          urlPattern: /\/api\/measurements/,
-          handler: 'NetworkFirst',
-          options: {
-            cacheName: 'api-measurements',
-            networkTimeoutSeconds: 5,
-            expiration: { maxEntries: 200, maxAgeSeconds: 604800 },
-            cacheableResponse: { statuses: [0, 200] }
-          }
-        },
-        {
-          urlPattern: /\/api\/_nuxt_icon\//,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'api-nuxt-icon',
-            matchOptions: {
-              ignoreSearch: true
-            },
-            expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            cacheableResponse: { statuses: [0, 200] }
-          }
-        },
-        {
-          urlPattern: /\/favicon\/favicon\.ico$/,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'static-assets-cache',
-            expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            cacheableResponse: { statuses: [0, 200] }
-          }
-        }
-      ]
+      globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,json}']
     },
     devOptions: { enabled: false }
   }

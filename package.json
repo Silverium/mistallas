@@ -3,6 +3,8 @@
   "scripts": {
     "dev": "NUXT_DEV_SERVER=true nuxi dev --host 0.0.0.0",
     "dev:local": "node scripts/start-preview.mjs",
+    "preview:no-sw": "NUXT_DISABLE_PWA=true pnpm dev:local",
+    "preview:sw-destroy": "NUXT_PWA_SELF_DESTROY=true pnpm dev:local",
     "build": "nuxi build",
     "preview": "pnpm dev:local",
     "db:generate": "drizzle-kit generate",
@@ -50,6 +52,12 @@
     "eslint": "^9.29.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.8",
+    "workbox-cacheable-response": "^7.3.0",
+    "workbox-core": "^7.3.0",
+    "workbox-expiration": "^7.3.0",
+    "workbox-precaching": "^7.3.0",
+    "workbox-routing": "^7.3.0",
+    "workbox-strategies": "^7.3.0",
     "wrangler": "^4.20.1"
   },
   "packageManager": "pnpm@10.12.1",

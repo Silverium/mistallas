@@ -145,7 +145,7 @@ export const usePendingPhotosStore = defineStore('pendingPhotos', () => {
           }))
         })
       },
-      deserialize: async (data: string) => {
+      deserialize: (data: string) => {
         const parsed = JSON.parse(data) as {
           pendingPhotos: Array<{
             id: string
@@ -155,28 +155,12 @@ export const usePendingPhotosStore = defineStore('pendingPhotos', () => {
           }>
         }
 
-        // Reconstruct blobUrls from fileBase64 on restore
-        const photos: PendingPhoto[] = []
-        for (const p of parsed.pendingPhotos) {
-          // Properly reconstruct blob URL from base64
-          let blobUrl: string
-          try {
-            // fileBase64 is a data URL like "data:image/webp;base64,ABC123..."
-            // Convert to blob and create object URL
-            const response = await fetch(p.fileBase64)
-            const blob = await response.blob()
-            blobUrl = URL.createObjectURL(blob)
-          }
-          catch {
-            // Fallback: use data URL directly if fetch fails
-            blobUrl = p.fileBase64
-          }
-
-          photos.push({
-            ...p,
-            blobUrl
-          })
-        }
+        // Reconstruct previews synchronously so hydration is deterministic
+        // during reloads and offline bootstrapping.
+        const photos: PendingPhoto[] = parsed.pendingPhotos.map(p => ({
+          ...p,
+          blobUrl: p.fileBase64
+        }))
 
         return {
           pendingPhotos: photos
