@@ -6,11 +6,16 @@ const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic',
 
 const photoUploadSchema = z.object({
   fileBase64: z.string().min(1),
-  mimeType: z.enum(allowedMimeTypes),
+  mimeType: z.enum(allowedMimeTypes).optional(),
   slot: z.coerce.number().int().min(1).max(3).optional(),
   width: z.coerce.number().int().positive().optional(),
   height: z.coerce.number().int().positive().optional()
 })
+
+function inferMimeTypeFromDataUrl(value: string): string {
+  const match = value.match(/^data:([^;,]+)[;,]/i)
+  return match?.[1]?.toLowerCase() ?? ''
+}
 
 function inferMimeTypeFromFilename(filename?: string): string {
   if (!filename) {
@@ -91,7 +96,7 @@ export default eventHandler(async (event) => {
     requestedSlot = parsedBody.data.slot ?? null
     width = parsedBody.data.width ?? null
     height = parsedBody.data.height ?? null
-    mimeType = parsedBody.data.mimeType
+    mimeType = parsedBody.data.mimeType ?? inferMimeTypeFromDataUrl(parsedBody.data.fileBase64)
     fileBytes = decodeBase64ToBytes(parsedBody.data.fileBase64)
   }
   else {

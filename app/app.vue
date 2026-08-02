@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '#ui/types'
+import { useOfflineRouteAccess } from '~/utils/offline-route-access'
+import { useEffectiveSession } from '~/composables/useEffectiveSession'
 
-const { loggedIn, user, clear } = useUserSession()
+const { loggedIn, user, clear } = useEffectiveSession()
 const colorMode = useColorMode()
+const offlineRouteAccess = useOfflineRouteAccess()
 
 watch(loggedIn, () => {
-  if (!loggedIn.value) {
+  if (!loggedIn.value && !offlineRouteAccess.value) {
     navigateTo('/')
   }
 })
@@ -24,14 +27,14 @@ const toggleDarkMode = () => {
 useHead({
   htmlAttrs: { lang: 'es' },
   link: [
-    { rel: 'icon', type: 'image/png', href: '/favicon/favicon-96x96.png', sizes: '96x96' },
-    { rel: 'icon', type: 'image/svg+xml', href: '/favicon/favicon.svg' },
-    { rel: 'shortcut icon', href: '/favicon/favicon.ico' },
-    { rel: 'apple-touch-icon', sizes: '180x180', href: '/favicon/apple-touch-icon.png' },
-    { rel: 'manifest', href: '/favicon/site.webmanifest' }
+    { rel: 'icon', href: '/favicon/favicon.ico', sizes: '48x48' },
+    { rel: 'icon', href: '/favicon/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+    { rel: 'apple-touch-icon', href: '/favicon/apple-touch-icon.png' },
+    { rel: 'manifest', href: '/manifest.webmanifest' }
   ],
   meta: [
-    { name: 'apple-mobile-web-app-title', content: 'Mis Tallas' }
+    { name: 'apple-mobile-web-app-title', content: 'Mis Tallas' },
+    { name: 'theme-color', content: '#ffffff' }
   ]
 })
 
@@ -68,6 +71,36 @@ const items = computed(() => {
 
 const userDisplayName = computed(() => user.value?.login || user.value?.email || 'Usuario')
 
+const toast = useToast()
+let wasOffline = false
+const { isOnline: onlineStatus, pendingCount: count } = useNetworkStatus()
+const isOnline = computed(() => onlineStatus.value)
+const pendingCount = computed(() => count.value)
+
+const showOfflineDetails = () => {
+  let description = 'Estás sin conexión. Visualización de datos y cambios locales disponibles.'
+  if (pendingCount.value > 0) {
+    description += ` Tienes ${pendingCount.value} cambio${pendingCount.value !== 1 ? 's' : ''} pendiente${pendingCount.value !== 1 ? 's' : ''} que se sincronizarán cuando vuelvas a conectarte.`
+  }
+  toast.add({
+    title: 'Sin conexión',
+    description,
+    color: 'warning'
+  })
+}
+
+watch(onlineStatus, (val) => {
+  if (val && wasOffline) {
+    toast.add({
+      title: 'Vuelves a tener conexión',
+      color: 'success',
+      icon: 'i-lucide-check-circle',
+      duration: 2000
+    })
+  }
+  wasOffline = !val
+}, { immediate: true })
+
 const userAvatar = computed(() => {
   if (!user.value) {
     return undefined
@@ -87,6 +120,27 @@ const userAvatar = computed(() => {
 
 <template>
   <UApp>
+    <Teleport to="body">
+      <!-- Offline status indicator - small circle button in bottom-left -->
+      <UButton
+        v-if="!isOnline"
+        size="lg"
+        color="warning"
+        variant="soft"
+        aria-label="Indicador sin conexión"
+        data-testid="offline-indicator"
+        class="fixed bottom-4 left-4 z-50 rounded-full w-10 h-10 flex items-center justify-center"
+        @click="showOfflineDetails"
+      >
+        <svg
+          class="w-6 h-6"
+          fill="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" />
+        </svg>
+      </UButton>
+    </Teleport>
     <UContainer class="flex min-h-dvh flex-col">
       <div class="mb-2 text-right">
         <UButton
@@ -120,7 +174,7 @@ const userAvatar = computed(() => {
                 // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
                 { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram' },
                 { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
-                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true },
+                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
                 // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true }
               ]
             ]"
@@ -155,6 +209,7 @@ const userAvatar = computed(() => {
             />
             <UButton
               to="/todos"
+              :prefetch="false"
               icon="i-lucide-list"
               label="Tareas"
               :color="$route.path === '/todos' ? 'primary' : 'neutral'"
@@ -162,6 +217,7 @@ const userAvatar = computed(() => {
             />
             <UButton
               to="/optimistic-todos"
+              :prefetch="false"
               icon="i-lucide-sparkles"
               label="Tareas Optimistas"
               :color="$route.path === '/optimistic-todos' ? 'primary' : 'neutral'"
@@ -170,6 +226,7 @@ const userAvatar = computed(() => {
             <UButton
               v-if="user?.role === 'admin'"
               to="/admin"
+              :prefetch="false"
               icon="i-lucide-shield"
               label="Admin"
               :color="$route.path.startsWith('/admin') ? 'primary' : 'neutral'"
@@ -218,7 +275,7 @@ const userAvatar = computed(() => {
           <UButton
             color="neutral"
             variant="link"
-            icon="prime:twitter"
+            icon="i-simple-icons-x"
           />
         </ULink>
       </footer>

@@ -9,10 +9,12 @@ const mocks = vi.hoisted(() => {
     purchaseCount: 0,
     measurements: [] as Array<{ id: number, userId: string, recordedAt: Date }>,
     createdPurchase: { id: 101, userId: 'user-1' },
-    createdSnapshot: { id: 202, purchaseEventId: 101, userId: 'user-1' }
+    createdSnapshot: { id: 202, purchaseEventId: 101, userId: 'user-1' },
+    userTier: 'free' as string
   }
 
   const tables = {
+    users: { __table: 'users' },
     userMeasurements: { __table: 'userMeasurements' },
     purchaseEvents: { __table: 'purchaseEvents' },
     purchaseMeasurementSnapshots: { __table: 'purchaseMeasurementSnapshots' }
@@ -25,6 +27,8 @@ const mocks = vi.hoisted(() => {
           get: async () => {
             if (table === tables.purchaseEvents)
               return { count: state.purchaseCount }
+            if (table === tables.users)
+              return { id: 'user-1', tier: state.userTier }
             return null
           },
           all: async () => {
@@ -119,6 +123,7 @@ describe('POST /api/purchases tier enforcement', () => {
     mocks.state.measurements = []
     mocks.state.createdPurchase = { id: 101, userId: 'user-1' }
     mocks.state.createdSnapshot = { id: 202, purchaseEventId: 101, userId: 'user-1' }
+    mocks.state.userTier = 'free'
 
     mocks.useValidatedBody.mockResolvedValue({
       brand: 'Nike',
@@ -128,8 +133,35 @@ describe('POST /api/purchases tier enforcement', () => {
     })
   })
 
-  it('uses current user tier for limit checks', async () => {
+  it('fetches current tier from database (not session) to handle post-upgrade', async () => {
     mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-1', tier: 'premium' } })
+    mocks.state.userTier = 'enterprise'
+    mocks.state.purchaseCount = 500
+
+    const { default: handler } = await import('./index.post')
+
+    await expect(handler({} as never)).resolves.toEqual({
+      purchase: mocks.state.createdPurchase,
+      snapshot: null
+    })
+  })
+
+  it('rejects purchase when free tier limit (200) is reached', async () => {
+    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-1' } })
+    mocks.state.userTier = 'free'
+    mocks.state.purchaseCount = 200
+
+    const { default: handler } = await import('./index.post')
+
+    await expect(handler({} as never)).rejects.toMatchObject({
+      statusCode: 403,
+      message: 'Purchase limit reached for your tier. Please upgrade to continue.'
+    })
+  })
+
+  it('rejects purchase when premium tier limit (500) is reached', async () => {
+    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-1' } })
+    mocks.state.userTier = 'premium'
     mocks.state.purchaseCount = 500
 
     const { default: handler } = await import('./index.post')
@@ -140,8 +172,9 @@ describe('POST /api/purchases tier enforcement', () => {
     })
   })
 
-  it('falls back to free tier when session tier is missing', async () => {
+  it('falls back to free tier when database tier query returns null', async () => {
     mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-2' } })
+    mocks.state.userTier = '' // Will be treated as falsy
     mocks.state.purchaseCount = 200
 
     const { default: handler } = await import('./index.post')
@@ -150,7 +183,8 @@ describe('POST /api/purchases tier enforcement', () => {
   })
 
   it('creates a purchase and measurement snapshot for a premium user below the limit', async () => {
-    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-3', tier: 'premium' } })
+    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-3' } })
+    mocks.state.userTier = 'premium'
     mocks.state.purchaseCount = 499
     mocks.state.measurements = [{
       id: 1,
@@ -178,7 +212,8 @@ describe('POST /api/purchases tier enforcement', () => {
   })
 
   it('creates a purchase without a snapshot when no measurements exist and user is under the tier limit', async () => {
-    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-4', tier: 'premium' } })
+    mocks.requireUserSession.mockResolvedValue({ user: { id: 'user-4' } })
+    mocks.state.userTier = 'premium'
     mocks.state.purchaseCount = 499
 
     const { default: handler } = await import('./index.post')

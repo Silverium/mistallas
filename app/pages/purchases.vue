@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { measurementsQuery } from '~/queries/measurements'
-import { purchasesPageQuery } from '~/queries/purchases'
+import { calculateMultiWordSearchScore } from '~/utils/fuzzy-search'
 import { getSpanishApiErrorMessage, isNuxtZodError } from '~/utils/errors'
 import { blobToBase64, compressImage } from '~/utils/image-compression'
 import { measurementSpecs } from '~/utils/measurementSpecs'
+import { buildOfflinePurchasesResult } from '~/utils/offline-purchases'
+import { getQueuedPendingPhotoPreviews } from '~/utils/offline-pending-photos'
+import { shouldEnableOfflineProtectedQuery } from '~/utils/offline-query-access'
 import { useSyncedStringQueryParam } from '~/utils/query-param'
+import { useEffectiveSession } from '~/composables/useEffectiveSession'
+import { isOfflineQueuedError } from '~/composables/useOfflineFetch'
+import { useOfflineQueueStore } from '~/composables/useOfflineQueue'
+import { usePendingPhotosStore } from '~/composables/usePendingPhotosStore'
+import { usePendingPurchasesStore } from '~/composables/usePendingPurchasesStore'
+import { useOfflineRouteAccess } from '~/utils/offline-route-access'
 
 definePageMeta({
   middleware: 'auth'
 })
 
 type Purchase = {
-  id: number
+  id: number | string
   brand: string
   category: string
   productType: string
@@ -21,6 +29,7 @@ type Purchase = {
   notes?: string | null
   price?: number | null
   photoSlots?: number[]
+  isPending?: boolean
 }
 
 type MeasurementFieldKey = typeof measurementSpecs[number]['key']
@@ -35,6 +44,7 @@ type Measurement = {
 type ComparisonResult = {
   snapshotAtPurchase?: MeasurementSnapshot
   currentMeasurement?: MeasurementSnapshot
+  offline?: boolean
   highlights?: {
     weight?: string | null
   }
@@ -62,6 +72,10 @@ type PurchasePhoto = {
 const toast = useToast()
 const queryCache = useQueryCache()
 const requestFetch = useRequestFetch()
+const offlineFetch = useOfflineFetch()
+const offlineQueue = useOfflineQueueStore()
+const pendingPhotos = usePendingPhotosStore()
+const pendingPurchases = usePendingPurchasesStore()
 
 const form = reactive({
   brand: '',
@@ -79,15 +93,19 @@ const selectedPhotoPurchaseId = ref<number | null>(null)
 const selectedPreviewPurchase = ref<Purchase | null>(null)
 const selectedPreviewSlot = ref<number | null>(null)
 const photoInput = ref<HTMLInputElement | null>(null)
-const directUploadPurchaseId = ref<number | null>(null)
+const directUploadPurchaseId = ref<number | string | null>(null)
+const currentEditingPurchase = ref<Purchase | null>(null)
 const historyFilter = useSyncedStringQueryParam('filter')
 const editingPurchaseId = ref<number | null>(null)
 const deletingPurchaseId = ref<number | null>(null)
 const isAddPurchaseDialogOpen = ref(false)
 const isEditPurchaseDialogOpen = ref(false)
-const pendingPhotosToUpload = ref<{ blob: Blob; mimeType: string }[]>([])
+const isDeletePurchaseDialogOpen = ref(false)
+const pendingDeletionPurchase = ref<Purchase | null>(null)
 
 type PendingPhotoPreview = {
+  id: string
+  source: 'local' | 'queue'
   file: File
   previewUrl: string
 }
@@ -101,48 +119,608 @@ type RowDiff = {
   delta: number
 }
 
-const { loggedIn } = useUserSession()
+const { loggedIn } = useEffectiveSession()
+const route = useRoute()
 const router = useRouter()
+const isHydrated = ref(false)
+const offlineRouteAccess = useOfflineRouteAccess()
+const offlineStore = useOfflineDataStore()
+const globalOnlineState = useState<boolean>('network-online', () => import.meta.client ? navigator.onLine : true)
+const syncVersion = useState<number>('network-sync-version', () => 0)
+const syncedPhotoPurchases = useState<number[]>('network-synced-photo-purchase-ids', () => [])
+const isClientOffline = ref(import.meta.client ? !navigator.onLine : false)
+const onlineRecoveryVersion = ref(0)
+const connectivityPollTimer = ref<number | null>(null)
+const needsOnlineRefetch = ref(false)
+const isHandlingOnlineRecovery = ref(false)
+const lastOnlineRecoveryAttemptAt = ref(0)
+const optimisticPhotoSlotsByPurchase = ref<Record<number | string, number[]>>({})
+const queuedPhotoCandidates = ref<number[]>([])
+const showScrollToTopButton = ref(false)
 
-const { data: measurements } = useQuery({
-  ...measurementsQuery,
-  enabled: () => loggedIn.value
-})
+const purchasesPage = 1
+const purchasesFetchLimit = 100
+const ONLINE_RECOVERY_RETRY_MS = 15_000
 
-const hasMeasurements = computed(() => (measurements.value?.length ?? 0) > 0)
+const updateScrollToTopVisibility = () => {
+  if (!import.meta.client) {
+    return
+  }
 
-const currentPage = ref(1)
-const pageSize = ref(20)
+  showScrollToTopButton.value = window.scrollY > 280
+}
 
-const baseQueryOptions = computed(() => purchasesPageQuery(currentPage.value, pageSize.value, ''))
+const scrollToTop = () => {
+  if (!import.meta.client) {
+    return
+  }
 
-const { data: purchasesResponse } = useQuery({
-  key: () => [baseQueryOptions.value.key[0], baseQueryOptions.value.key[1], baseQueryOptions.value.key[2], historyFilter.value],
-  query: async () => {
-    const params = new URLSearchParams({
-      page: String(currentPage.value),
-      limit: String(pageSize.value)
-    })
-    if (historyFilter.value.trim()) {
-      params.append('search', historyFilter.value.trim())
-    }
-    return useRequestFetch()(`/api/purchases?${params.toString()}`)
-  },
-  enabled: () => loggedIn.value
-})
-
-watch(() => currentPage.value, () => {
-  // Scroll to top when page changes
   window.scrollTo({ top: 0, behavior: 'smooth' })
-}, { immediate: false })
+}
 
-watch(() => historyFilter.value, async () => {
-  // Reset to page 1 when search term changes
-  currentPage.value = 1
-}, { flush: 'post' })
+function readOfflinePurchasePagesFromStorage() {
+  if (!import.meta.client) {
+    return {} as Record<string, { purchases?: unknown[] }>
+  }
+
+  const candidateKeys = ['offlineData', 'pinia-offlineData', 'pinia-persistedstate-offlineData']
+
+  for (const key of candidateKeys) {
+    const raw = localStorage.getItem(key)
+    if (!raw) {
+      continue
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { purchasePages?: Record<string, { purchases?: unknown[] }> }
+      if (parsed?.purchasePages && Object.keys(parsed.purchasePages).length > 0) {
+        return parsed.purchasePages
+      }
+    }
+    catch {
+      // Ignore malformed localStorage entries and continue to next key.
+    }
+  }
+
+  return {} as Record<string, { purchases?: unknown[] }>
+}
+
+const effectiveOfflinePurchasePages = computed(() => {
+  if (Object.keys(offlineStore.purchasePages).length > 0) {
+    return offlineStore.purchasePages
+  }
+
+  return readOfflinePurchasePagesFromStorage()
+})
+
+const offlinePurchasesVersion = ref('')
+
+watch(
+  () => Object.keys(effectiveOfflinePurchasePages.value).sort().join('|'),
+  (nextVersion) => {
+    if (nextVersion !== offlinePurchasesVersion.value) {
+      offlinePurchasesVersion.value = nextVersion
+    }
+  },
+  { immediate: true }
+)
+
+const offlineVersionForQuery = computed(() => {
+  return isClientOffline.value ? offlinePurchasesVersion.value : 'online'
+})
+
+const { data: onlineMeasurements } = useQuery({
+  key: () => ['measurements', isClientOffline.value ? 'offline' : 'online'],
+  query: async () => {
+    try {
+      return await useRequestFetch()('/api/measurements') as unknown[]
+    }
+    catch {
+      // In client-navigation offline transitions, measurements endpoint can
+      // fail through SW/network races. Keep page functional with cached data.
+      return (offlineStore.measurements ?? []) as unknown[]
+    }
+  },
+  enabled: () => isHydrated.value && loggedIn.value && !isClientOffline.value
+})
+
+const measurements = computed(() => {
+  if (isClientOffline.value) {
+    return (offlineStore.measurements ?? []) as unknown[]
+  }
+
+  return (onlineMeasurements.value ?? []) as unknown[]
+})
+
+const hasMeasurements = computed(() => (measurements.value.length ?? 0) > 0)
+
+const resolveSearchTerm = () => {
+  const fromRoute = route.query.filter
+  const routeFilter = Array.isArray(fromRoute) ? fromRoute[0] : fromRoute
+
+  if (typeof routeFilter === 'string' && routeFilter.trim()) {
+    return routeFilter.trim()
+  }
+
+  return historyFilter.value.trim()
+}
+
+const getUnfilteredOfflinePurchasePages = (purchasePages: Record<string, { purchases?: unknown[] }>) => {
+  const entries = Object.entries(purchasePages)
+  const unfiltered = entries.filter(([key]) => /^\d+:\d+:$/.test(key))
+
+  if (unfiltered.length > 0) {
+    return Object.fromEntries(unfiltered)
+  }
+
+  // Backward compatibility: if old cache key formats exist, still use them.
+  return purchasePages
+}
+
+type PurchasesApiResponse = {
+  purchases?: unknown[]
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
+const fetchOnlinePurchasesPage = async (page: number, search: string, recovery: number): Promise<PurchasesApiResponse> => {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(purchasesFetchLimit)
+  })
+
+  if (search) {
+    params.append('search', search)
+  }
+
+  if (recovery > 0) {
+    params.append('_recovery', String(recovery))
+  }
+
+  return await useRequestFetch()(`/api/purchases?${params.toString()}`) as PurchasesApiResponse
+}
+
+const fetchAllOnlinePurchases = async (search: string, recovery: number) => {
+  let page = 1
+  let totalPages = 1
+  let total = 0
+  const allPurchases: unknown[] = []
+  const pagesForCache: Array<{ page: number, response: PurchasesApiResponse }> = []
+
+  do {
+    const response = await fetchOnlinePurchasesPage(page, search, recovery)
+    const purchases = response.purchases ?? []
+
+    allPurchases.push(...purchases)
+    pagesForCache.push({ page, response })
+
+    totalPages = Math.max(1, response.pagination?.totalPages ?? 1)
+    total = response.pagination?.total ?? allPurchases.length
+    page += 1
+  } while (page <= totalPages)
+
+  return {
+    response: {
+      purchases: allPurchases,
+      pagination: {
+        page: purchasesPage,
+        limit: allPurchases.length,
+        total,
+        totalPages: 1
+      }
+    },
+    pagesForCache
+  }
+}
+
+const persistUnfilteredPurchasePages = (pagesForCache: Array<{ page: number, response: PurchasesApiResponse }>) => {
+  for (const { page, response } of pagesForCache) {
+    offlineStore.setPurchasePage(page, purchasesFetchLimit, '', {
+      purchases: response.purchases ?? [],
+      pagination: {
+        page: response.pagination?.page ?? page,
+        limit: response.pagination?.limit ?? purchasesFetchLimit,
+        total: response.pagination?.total ?? (response.purchases?.length ?? 0),
+        totalPages: response.pagination?.totalPages ?? 1
+      }
+    })
+  }
+}
+
+const toMeasurementSnapshot = (measurement: Measurement | null | undefined): MeasurementSnapshot | undefined => {
+  if (!measurement) {
+    return undefined
+  }
+
+  const snapshot: MeasurementSnapshot = {}
+  for (const spec of measurementSpecs) {
+    const value = measurement[spec.key]
+    snapshot[spec.key] = typeof value === 'number' ? value : null
+  }
+
+  return snapshot
+}
+
+const { data: purchasesResponse, refresh: refreshPurchases } = useQuery({
+  key: () => [
+    'purchases',
+    resolveSearchTerm(),
+    offlineVersionForQuery.value,
+    onlineRecoveryVersion.value,
+    pendingPurchases.pendingPurchases.length
+  ],
+  query: async () => {
+    const searchTerm = resolveSearchTerm()
+    const buildOfflineResult = () => {
+      const unfilteredOfflinePages = getUnfilteredOfflinePurchasePages(effectiveOfflinePurchasePages.value)
+      const estimatedOfflineCount = Object.values(unfilteredOfflinePages).reduce((sum, pageData) => {
+        return sum + (Array.isArray(pageData?.purchases) ? pageData.purchases.length : 0)
+      }, 0)
+
+      return buildOfflinePurchasesResult(
+        unfilteredOfflinePages,
+        searchTerm,
+        purchasesPage,
+        Math.max(estimatedOfflineCount, purchasesFetchLimit),
+        calculateMultiWordSearchScore,
+        pendingPurchases.pendingPurchases
+      )
+    }
+
+    // Offline search: use cached purchases and apply fuzzy search locally.
+    // Keep this branch first so online fetch path does not depend reactively
+    // on offline store writes (which can otherwise create refetch loops).
+    if (isClientOffline.value) {
+      const result = buildOfflineResult()
+      return result
+    }
+
+    try {
+      const { response, pagesForCache } = await fetchAllOnlinePurchases(searchTerm, onlineRecoveryVersion.value)
+
+      // Cache ALL purchases, regardless of search term
+      // This ensures offline mode has complete data
+      persistUnfilteredPurchasePages(pagesForCache)
+
+      for (let i = offlineQueue.queue.length - 1; i >= 0; i--) {
+        const queuedItem = offlineQueue.queue[i]!
+        const queuedUrl = typeof queuedItem.url === 'string' ? queuedItem.url : ''
+        const isPhotoUpload = queuedUrl.includes('/photos')
+        const hasUuidPurchaseId = /\/api\/purchases\/[a-f0-9-]{36}\/photos/.test(queuedUrl)
+        if (isPhotoUpload && hasUuidPurchaseId) {
+          offlineQueue.dequeue(queuedItem.id)
+        }
+      }
+
+      // Remove pending purchases that have been synced to the server by matching on purchase details
+      // A pending purchase is considered synced if we find a matching purchase in the response
+      // with the same brand, category, productType, and sizeLabel.
+      // Also update any queued photo uploads to use the real synced purchase ID.
+      const optimisticPendingPurchases: Array<(typeof pendingPurchases.pendingPurchases)[number]> = []
+
+      if (pendingPurchases.pendingPurchases.length > 0 && (response.purchases?.length ?? 0) > 0) {
+        for (const pending of pendingPurchases.pendingPurchases) {
+          const syncedPurchase = response.purchases?.find((p: unknown) => {
+            if (!p || typeof p !== 'object') return false
+            const purchase = p as Record<string, unknown>
+            const match = (
+              purchase.brand === pending.brand
+              && purchase.category === pending.category
+              && purchase.productType === pending.productType
+              && purchase.sizeLabel === pending.sizeLabel
+            )
+            return match
+          }) as Record<string, unknown> | undefined
+
+          if (syncedPurchase) {
+            // Convert ID to number if it's a string
+            const syncedPurchaseId = syncedPurchase.id
+            let realPurchaseId: number | string = typeof syncedPurchaseId === 'number' || typeof syncedPurchaseId === 'string'
+              ? syncedPurchaseId
+              : pending.id
+            if (typeof realPurchaseId === 'string') {
+              const parsed = parseInt(realPurchaseId, 10)
+              realPurchaseId = Number.isFinite(parsed) ? parsed : pending.id
+            }
+
+            const tempPendingPurchaseIdStr = pending.id as string
+
+            // Fix queued photo uploads: replace temp purchase ID with real purchase ID
+            // This fixes queued photo uploads for pending purchases that now have real IDs
+            const photoUrlPattern = `/api/purchases/${tempPendingPurchaseIdStr}/photos`
+            const photosToRequeue: Array<{ id: string, method: string, body: unknown }> = []
+
+            for (let i = offlineQueue.queue.length - 1; i >= 0; i--) {
+              const queuedItem = offlineQueue.queue[i]!
+              if (queuedItem.url === photoUrlPattern) {
+                // Dequeue the old photo upload
+                photosToRequeue.push({
+                  id: queuedItem.id,
+                  method: queuedItem.method,
+                  body: queuedItem.body
+                })
+                offlineQueue.dequeue(queuedItem.id)
+              }
+            }
+
+            // Re-enqueue with the correct purchase ID
+            for (const photo of photosToRequeue) {
+              offlineQueue.enqueue({
+                method: photo.method as 'POST' | 'PATCH' | 'DELETE',
+                url: `/api/purchases/${realPurchaseId}/photos`,
+                body: photo.body
+              })
+            }
+
+            // Migrate pending photos from temp UUID ID to real numeric ID
+            // This handles photos stored locally but not yet queued for upload
+            const pendingPhotosForTempId = pendingPhotos.getPhotosByPurchaseId(tempPendingPurchaseIdStr)
+            if (pendingPhotosForTempId.length > 0) {
+              // Check how many photos the synced purchase already has
+              const syncedPurchase = response.purchases?.find((p: unknown) => {
+                if (!p || typeof p !== 'object') return false
+                const purchase = p as Record<string, unknown>
+                return (
+                  purchase.brand === pending.brand
+                  && purchase.category === pending.category
+                  && purchase.productType === pending.productType
+                  && purchase.sizeLabel === pending.sizeLabel
+                )
+              }) as Record<string, unknown> | undefined
+
+              const existingPhotoSlotsOnSyncedPurchase = (syncedPurchase?.photoSlots as number[])?.length ?? 0
+              const maxPhotosPerPurchase = 3
+              let photosQueuedFromThisPending = 0
+
+              for (const photo of pendingPhotosForTempId) {
+                // For THIS specific purchase, check if we have room for more photos
+                // Only queue if: existing photos + photos we're queuing from this pending purchase < 3
+                const totalPhotosForThisPurchase = existingPhotoSlotsOnSyncedPurchase + photosQueuedFromThisPending
+
+                if (totalPhotosForThisPurchase < maxPhotosPerPurchase) {
+                  // Migrate the photo to use the real purchase ID
+                  pendingPhotos.migratePhotoToNewPurchaseId(photo.id, realPurchaseId)
+                  // Queue the photo for upload with the real purchase ID
+                  offlineQueue.enqueue({
+                    method: 'POST',
+                    url: `/api/purchases/${realPurchaseId}/photos`,
+                    body: {
+                      fileBase64: photo.fileBase64,
+                      mimeType: photo.mimeType
+                    }
+                  })
+                  photosQueuedFromThisPending++
+                }
+                else {
+                  // Remove photos that can't be uploaded due to this purchase's limit
+                  pendingPhotos.removePhoto(photo.id)
+                }
+              }
+            }
+
+            pendingPurchases.removePurchaseByBrand(
+              pending.brand,
+              pending.category,
+              pending.productType,
+              pending.sizeLabel
+            )
+          }
+          else {
+            // Pending purchase was created offline but not found on server
+            // Skip migration for now - will retry on next sync
+            // Photos will remain in pending store with UUID purchase ID
+            optimisticPendingPurchases.push(pending)
+          }
+        }
+      }
+
+      if (pendingPurchases.pendingPurchases.length > 0 && optimisticPendingPurchases.length > 0) {
+        return buildOfflinePurchasesResult(
+          { '1:100:': { purchases: response.purchases ?? [] } },
+          searchTerm,
+          purchasesPage,
+          Math.max((response.purchases?.length ?? 0) + optimisticPendingPurchases.length, purchasesFetchLimit),
+          calculateMultiWordSearchScore,
+          optimisticPendingPurchases
+        )
+      }
+
+      // UX guard: after reconnect, transient empty online responses should not
+      // blank a previously available cached history list.
+      if ((response.purchases?.length ?? 0) === 0) {
+        const offlineResult = buildOfflineResult()
+        if ((offlineResult.purchases?.length ?? 0) > 0) {
+          return offlineResult
+        }
+      }
+
+      // UX guard: after reconnect, transient empty online responses should not
+      // blank a previously available cached history list.
+      if ((response.purchases?.length ?? 0) === 0) {
+        const offlineResult = buildOfflineResult()
+        if ((offlineResult.purchases?.length ?? 0) > 0) {
+          return offlineResult
+        }
+      }
+
+      return response
+    }
+    catch {
+      // Fallback to cached purchases if network fails during client-side navigation.
+      if (Object.keys(effectiveOfflinePurchasePages.value).length > 0) {
+        return buildOfflineResult()
+      }
+      throw new Error('No cached purchases available')
+    }
+  },
+  enabled: () => shouldEnableOfflineProtectedQuery(isHydrated.value, loggedIn.value, offlineRouteAccess.value)
+})
+
+watch(globalOnlineState, async (online, wasOnline) => {
+  if (online === wasOnline) {
+    return
+  }
+
+  if (online) {
+    await handleBrowserOnline()
+    return
+  }
+
+  await handleBrowserOffline()
+})
+
+watch(syncVersion, async (current, previous) => {
+  if (current === previous) {
+    return
+  }
+
+  if (!import.meta.client) {
+    return
+  }
+
+  if (navigator.onLine) {
+    isClientOffline.value = false
+
+    promoteQueuedPhotoCandidates()
+
+    onlineRecoveryVersion.value += 1
+    await refreshPurchases()
+
+    // Upload any pending photos for synced purchases after query completes
+    await uploadPendingPhotosForSyncedPurchases()
+
+    if (offlineQueue.queue.length === 0 && pendingPhotos.pendingPhotos.length === 0 && pendingPurchases.pendingPurchases.length > 0) {
+      pendingPurchases.clear()
+    }
+  }
+})
+
+const applyConnectivityState = async (nextOffline: boolean) => {
+  const wasOffline = isClientOffline.value
+  if (wasOffline === nextOffline) {
+    return
+  }
+
+  isClientOffline.value = nextOffline
+
+  if (nextOffline) {
+    needsOnlineRefetch.value = true
+  }
+}
+
+const handleBrowserOffline = async () => {
+  await applyConnectivityState(true)
+}
+
+const handleBrowserOnline = async () => {
+  if (isHandlingOnlineRecovery.value) {
+    return
+  }
+
+  const now = Date.now()
+  if (now - lastOnlineRecoveryAttemptAt.value < ONLINE_RECOVERY_RETRY_MS) {
+    return
+  }
+
+  if (import.meta.client && !navigator.onLine) {
+    await applyConnectivityState(true)
+    return
+  }
+
+  lastOnlineRecoveryAttemptAt.value = now
+
+  isHandlingOnlineRecovery.value = true
+
+  try {
+    await applyConnectivityState(false)
+
+    onlineRecoveryVersion.value += 1
+    needsOnlineRefetch.value = false
+
+    await queryCache.invalidateQueries({ key: ['purchases'] })
+  }
+  finally {
+    isHandlingOnlineRecovery.value = false
+  }
+}
+
+const shouldRetryOnlineRecoveryNow = () => {
+  const now = Date.now()
+  if (now - lastOnlineRecoveryAttemptAt.value < ONLINE_RECOVERY_RETRY_MS) {
+    return false
+  }
+  return true
+}
+
+const triggerOnlineRecoveryRetry = () => {
+  if (!needsOnlineRefetch.value) {
+    return
+  }
+
+  if (isHandlingOnlineRecovery.value) {
+    return
+  }
+
+  if (!shouldRetryOnlineRecoveryNow()) {
+    return
+  }
+
+  void handleBrowserOnline()
+}
+
+onMounted(() => {
+  isHydrated.value = true
+
+  if (import.meta.client) {
+    isClientOffline.value = !navigator.onLine
+    window.addEventListener('offline', handleBrowserOffline)
+    window.addEventListener('online', handleBrowserOnline)
+    window.addEventListener('scroll', updateScrollToTopVisibility, { passive: true })
+    updateScrollToTopVisibility()
+
+    connectivityPollTimer.value = window.setInterval(() => {
+      const nextOffline = !navigator.onLine
+
+      if (nextOffline) {
+        needsOnlineRefetch.value = true
+      }
+
+      if (nextOffline === isClientOffline.value) {
+        if (!nextOffline) {
+          triggerOnlineRecoveryRetry()
+        }
+        return
+      }
+
+      if (nextOffline) {
+        void handleBrowserOffline()
+      }
+      else {
+        void handleBrowserOnline()
+      }
+    }, 1000)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (import.meta.client) {
+    window.removeEventListener('offline', handleBrowserOffline)
+    window.removeEventListener('online', handleBrowserOnline)
+    window.removeEventListener('scroll', updateScrollToTopVisibility)
+
+    if (connectivityPollTimer.value != null) {
+      window.clearInterval(connectivityPollTimer.value)
+      connectivityPollTimer.value = null
+    }
+  }
+})
 
 const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
-  mutation: () => requestFetch('/api/purchases', {
+  mutation: () => offlineFetch('/api/purchases', {
     method: 'POST',
     body: {
       brand: form.brand,
@@ -154,18 +732,79 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
       price: form.price ? Number(form.price) : undefined
     }
   }),
-  async onSuccess(data: { purchase: Purchase }) {
-    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value))
+  async onSuccess(response: unknown) {
+    // When a purchase is successfully created, check if it matches any pending purchase
+    // If it does, migrate photos from the pending purchase to the real one
 
-    // Upload pending photos after purchase is created
-    if (pendingPhotosToUpload.value.length > 0) {
-      await uploadPendingPhotos(data.purchase.id)
+    const responseObj = response as { purchase?: { id?: number | string, brand?: string, category?: string, productType?: string, sizeLabel?: string } } | { id?: number | string, brand?: string, category?: string, productType?: string, sizeLabel?: string }
+    const newPurchase = 'purchase' in responseObj ? responseObj.purchase : responseObj
+
+    if (newPurchase && typeof newPurchase === 'object' && 'id' in newPurchase) {
+      const savedPurchase = newPurchase as { id: number | string, brand?: string, category?: string, productType?: string, sizeLabel?: string }
+      const realPurchaseId = savedPurchase.id
+      const brand = savedPurchase.brand || form.brand
+      const category = savedPurchase.category || form.category
+      const productType = savedPurchase.productType || form.productType
+      const sizeLabel = savedPurchase.sizeLabel || form.sizeLabel
+
+      // Find matching pending purchase
+      const matchingPendingPurchase = pendingPurchases.pendingPurchases.find(
+        p =>
+          p.brand === brand
+          && p.category === category
+          && p.productType === productType
+          && p.sizeLabel === sizeLabel
+      )
+
+      if (matchingPendingPurchase) {
+        const tempPurchaseId = matchingPendingPurchase.id as string
+        const pendingPhotosWithUuid = pendingPhotos.getPhotosByPurchaseId(tempPurchaseId)
+
+        if (pendingPhotosWithUuid.length > 0) {
+          // Migrate all photos to the real purchase ID
+          for (const photo of pendingPhotosWithUuid) {
+            pendingPhotos.migratePhotoToNewPurchaseId(photo.id, realPurchaseId)
+
+            // Queue the photo for upload with the real purchase ID
+            offlineQueue.enqueue({
+              method: 'POST',
+              url: `/api/purchases/${realPurchaseId}/photos`,
+              body: {
+                fileBase64: photo.fileBase64,
+                mimeType: photo.mimeType
+              }
+            })
+          }
+        }
+
+        // Remove the pending purchase since it's now synced
+        pendingPurchases.removePurchaseByBrand(brand, category, productType, sizeLabel)
+      }
     }
+
+    await queryCache.invalidateQueries({ key: ['purchases'] })
 
     resetForm()
     toast.add({ title: 'Compra guardada con snapshot de medidas.' })
   },
   onError(err) {
+    if (isOfflineQueuedError(err)) {
+      // Add to pending purchases when queued offline
+      pendingPurchases.addPurchase({
+        brand: form.brand,
+        category: form.category,
+        productType: form.productType,
+        sizeLabel: form.sizeLabel,
+        fitFeedback: form.fitFeedback || null,
+        notes: form.notes || null,
+        price: form.price ? Number(form.price) : undefined,
+        purchasedAt: new Date()
+      })
+
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      resetForm()
+      return
+    }
     if (isNuxtZodError(err)) {
       const title = err.data?.data.issues.map(issue => issue.message).join('\n')
       if (title) {
@@ -182,7 +821,7 @@ const { mutate: addPurchase, isLoading: addingPurchase } = useMutation({
 })
 
 const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
-  mutation: (purchaseId: number) => requestFetch(`/api/purchases/${purchaseId}`, {
+  mutation: (purchaseId: number) => offlineFetch(`/api/purchases/${purchaseId}`, {
     method: 'PATCH',
     body: {
       brand: form.brand,
@@ -194,18 +833,18 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
       price: form.price ? Number(form.price) : undefined
     }
   }),
-  async onSuccess(data: Purchase) {
-    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value))
-
-    // Upload pending photos after purchase is updated
-    if (pendingPhotosToUpload.value.length > 0) {
-      await uploadPendingPhotos(data.id)
-    }
+  async onSuccess(_data) {
+    await queryCache.invalidateQueries({ key: ['purchases'] })
 
     resetForm()
     toast.add({ title: 'Compra actualizada correctamente.' })
   },
   onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      resetForm()
+      return
+    }
     if (isNuxtZodError(err)) {
       const title = err.data?.data.issues.map(issue => issue.message).join('\n')
       if (title) {
@@ -221,12 +860,50 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
   }
 })
 
+const removePurchaseFromOfflineCache = (purchase: Purchase) => {
+  const purchaseId = String(purchase.id)
+
+  for (const [key, pageData] of Object.entries(offlineStore.purchasePages)) {
+    const purchases = Array.isArray(pageData?.purchases) ? pageData.purchases : []
+    const filteredPurchases = purchases.filter((item) => {
+      if (!item || typeof item !== 'object') {
+        return true
+      }
+
+      return String((item as { id?: unknown }).id ?? '') !== purchaseId
+    })
+
+    if (filteredPurchases.length === purchases.length) {
+      continue
+    }
+
+    const [pagePart, limitPart, ...searchParts] = key.split(':')
+    const parsedPage = Number.parseInt(pagePart ?? '', 10)
+    const parsedLimit = Number.parseInt(limitPart ?? '', 10)
+    const page = Number.isFinite(parsedPage) ? parsedPage : 1
+    const limit = Number.isFinite(parsedLimit) ? parsedLimit : purchasesFetchLimit
+    const search = searchParts.join(':')
+    const removedCount = purchases.length - filteredPurchases.length
+
+    offlineStore.setPurchasePage(page, limit, search, {
+      purchases: filteredPurchases,
+      pagination: {
+        page: pageData.pagination?.page ?? page,
+        limit: pageData.pagination?.limit ?? limit,
+        total: Math.max(0, (pageData.pagination?.total ?? purchases.length) - removedCount),
+        totalPages: pageData.pagination?.totalPages ?? 1
+      }
+    })
+  }
+}
+
 const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
-  mutation: (purchase: Purchase) => requestFetch(`/api/purchases/${purchase.id}`, {
+  mutation: (purchase: Purchase) => offlineFetch(`/api/purchases/${purchase.id}`, {
     method: 'DELETE'
   }),
   async onSuccess(_deleted, purchase) {
-    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value))
+    removePurchaseFromOfflineCache(purchase)
+    await queryCache.invalidateQueries({ key: ['purchases'] })
 
     if (selectedPurchase.value?.id === purchase.id) {
       selectedPurchase.value = null
@@ -246,18 +923,54 @@ const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
   onSettled() {
     deletingPurchaseId.value = null
   },
-  onError() {
+  onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      return
+    }
     toast.add({ title: 'No se pudo eliminar la compra.', color: 'error' })
   }
 })
 
 const { mutate: comparePurchase, isLoading: comparing } = useMutation({
-  mutation: (purchase: Purchase) => requestFetch<ComparisonResult>(`/api/purchases/${purchase.id}/compare`),
+  mutation: (purchase: Purchase) => offlineFetch<ComparisonResult>(`/api/purchases/${purchase.id}/compare`),
   onSuccess(data, purchase) {
     selectedComparison.value = data
     selectedPurchase.value = purchase
   },
   onError(err, purchase) {
+    if (isOfflineQueuedError(err)) {
+      // Show available measurements while offline
+      const availableMeasurements = (measurements.value ?? []) as Measurement[]
+
+      // Find the measurement closest to the purchase date
+      const purchaseDate = new Date(purchase.purchasedAt).getTime()
+      let closestMeasurement: Measurement | null = null
+      let closestDistance = Infinity
+
+      for (const m of availableMeasurements) {
+        const measurementDate = new Date(m.recordedAt).getTime()
+        const distance = Math.abs(measurementDate - purchaseDate)
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestMeasurement = m
+        }
+      }
+
+      const currentMeasurement = availableMeasurements[0]
+
+      selectedComparison.value = {
+        availableMeasurements,
+        currentMeasurement: toMeasurementSnapshot(currentMeasurement),
+        snapshotAtPurchase: toMeasurementSnapshot(closestMeasurement),
+        comparison: undefined,
+        offline: true
+      }
+      selectedPurchase.value = purchase
+      toast.add({ title: 'Sin conexión — mostrando medidas locales.' })
+      return
+    }
+    // Real error
     selectedComparison.value = {
       error: getSpanishApiErrorMessage(err) ?? 'No se pudo generar la comparación.'
     }
@@ -266,22 +979,26 @@ const { mutate: comparePurchase, isLoading: comparing } = useMutation({
 })
 
 const { mutate: linkMeasurementToPurchase, isLoading: linkingMeasurement } = useMutation({
-  mutation: (payload: { purchaseId: number; measurementId: number }) =>
-    requestFetch<{ success: boolean; snapshot: MeasurementSnapshot }>(
+  mutation: (payload: { purchaseId: number, measurementId: number }) =>
+    offlineFetch<{ success: boolean, snapshot: MeasurementSnapshot }>(
       `/api/purchases/${payload.purchaseId}/link-measurement`,
       {
         method: 'POST',
         body: { measurementId: payload.measurementId }
       }
     ),
-  async onSuccess(data, payload) {
+  async onSuccess(_data, payload) {
     if (selectedPurchase.value?.id === payload.purchaseId) {
       // Refresh the comparison after linking
       await comparePurchase(selectedPurchase.value)
     }
     toast.add({ title: 'Medida vinculada correctamente.' })
   },
-  onError() {
+  onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      return
+    }
     toast.add({ title: 'No se pudo vincular la medida.', color: 'error' })
   }
 })
@@ -293,7 +1010,18 @@ const { data: photoList, refresh: refreshPhotos, isLoading: photosLoading } = us
       return [] as PurchasePhoto[]
     }
 
-    return requestFetch<PurchasePhoto[]>(`/api/purchases/${selectedPhotoPurchaseId.value}/photos`)
+    if (isClientOffline.value) {
+      return [] as PurchasePhoto[]
+    }
+
+    try {
+      return await requestFetch<PurchasePhoto[]>(`/api/purchases/${selectedPhotoPurchaseId.value}/photos`)
+    }
+    catch {
+      // In offline/unstable transitions after refresh, this GET can fail while
+      // the UI remains usable via queued pending photos.
+      return [] as PurchasePhoto[]
+    }
   },
   enabled: () => !!selectedPhotoPurchaseId.value
 })
@@ -302,12 +1030,28 @@ const triggerPhotoPicker = () => {
   photoInput.value?.click()
 }
 
-const openEditAndAddPhoto = async (purchase: Purchase) => {
+const canAddPhoto = (purchase: Purchase): boolean => {
+  const actualPhotos = getMergedPhotoSlots(purchase).length
+  const pendingCount = getPendingPhotosForPurchase(purchase.id).length
+  return actualPhotos + pendingCount < 3
+}
+
+const openEditAndAddPhoto = (purchase: Purchase) => {
+  if (!canAddPhoto(purchase)) {
+    toast.add({ title: 'Máximo de 3 fotos por compra alcanzado.', color: 'error' })
+    return
+  }
   directUploadPurchaseId.value = purchase.id
   triggerPhotoPicker()
 }
 
-const buildPhotoUrl = (purchaseId: number, slot: number) => `/api/purchases/${purchaseId}/photos/${slot}`
+const buildPhotoUrl = (purchaseId: number | string, slot: number) => {
+  // Guard: only build URLs for synced (numeric) purchases
+  if (typeof purchaseId === 'string' || !Number.isFinite(Number(purchaseId))) {
+    return ''
+  }
+  return `/api/purchases/${purchaseId}/photos/${slot}`
+}
 
 const openPreview = (purchase: Purchase, slot: number) => {
   selectedPreviewPurchase.value = purchase
@@ -341,55 +1085,55 @@ const isPreviewOpen = computed({
   }
 })
 
-const uploadPhotoFile = async (purchaseId: number, compressedPhoto: { blob: Blob; mimeType: string }) => {
-  try {
-    const fileBase64 = await blobToBase64(compressedPhoto.blob)
+type PreparedPhotoUpload = {
+  compressedBlob: Blob
+  mimeType: string
+  fileBase64: string
+}
 
-    await requestFetch(`/api/purchases/${purchaseId}/photos`, {
-      method: 'POST',
-      body: {
-        fileBase64,
-        mimeType: compressedPhoto.mimeType
-      }
-    })
-  }
-  catch (_err) {
-    toast.add({
-      title: getSpanishApiErrorMessage(_err) ?? 'Error al subir foto',
-      color: 'error'
-    })
-    throw _err
+const preparePhotoUpload = async (file: File): Promise<PreparedPhotoUpload> => {
+  const compressedBlob = await compressImage(file)
+  const mimeType = compressedBlob.type || 'image/webp'
+  const fileBase64 = await blobToBase64(compressedBlob)
+
+  return {
+    compressedBlob,
+    mimeType,
+    fileBase64
   }
 }
 
-const uploadPendingPhotos = async (purchaseId: number) => {
-  if (!purchaseId || pendingPhotosToUpload.value.length === 0) {
+const uploadPhotoForPurchase = async (purchaseId: number | string, photo: PreparedPhotoUpload) => {
+  // For pending purchases (UUID string IDs), we can't upload to the API yet
+  // Just store in pending photos store for later upload after purchase syncs
+  // Check: if it's a string, or if it's not a finite number, it's a pending purchase
+  const isPendingPurchaseId = typeof purchaseId === 'string' || !Number.isFinite(Number(purchaseId))
+
+  if (isPendingPurchaseId) {
+    // This is a pending purchase - store locally only, NEVER try to upload to API
+    pendingPhotos.addPhoto(String(purchaseId), photo.compressedBlob, photo.mimeType, photo.fileBase64)
     return
   }
 
-  try {
-    // Upload all pending photos sequentially
-    for (const photo of pendingPhotosToUpload.value) {
-      await uploadPhotoFile(purchaseId, photo)
-    }
+  // For real purchases (numeric IDs), upload through the API
+  const numericId = Number(purchaseId)
+  if (!Number.isFinite(numericId)) {
+    // Safety check: if purchaseId is not a finite number, it's not a valid real purchase ID
+    // This should never happen if the isPendingPurchaseId check worked, but let's be safe
+    throw new Error('Invalid purchase ID for photo upload')
+  }
 
-    // After all uploads succeed, refresh and notify
-    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
-    if (pendingPhotosToUpload.value.length === 1) {
-      toast.add({ title: 'Foto subida' })
+  await offlineFetch(`/api/purchases/${numericId}/photos`, {
+    method: 'POST',
+    body: {
+      fileBase64: photo.fileBase64,
+      mimeType: photo.mimeType
     }
-    else {
-      toast.add({ title: `${pendingPhotosToUpload.value.length} fotos subidas` })
-    }
-    pendingPhotosToUpload.value = []
-    await refreshPhotos()
-  }
-  catch (_err) {
-    toast.add({
-      title: getSpanishApiErrorMessage(_err) ?? 'Error al subir fotos',
-      color: 'error'
-    })
-  }
+  })
+
+  await queryCache.invalidateQueries({ key: ['purchases'] })
+  toast.add({ title: 'Foto subida' })
+  await refreshPhotos()
 }
 
 const onPhotoInputChange = async (event: Event) => {
@@ -401,28 +1145,38 @@ const onPhotoInputChange = async (event: Event) => {
   }
 
   // Direct upload from list view
-  if (directUploadPurchaseId.value) {
+  if (directUploadPurchaseId.value != null) {
     const purchaseId = directUploadPurchaseId.value
     directUploadPurchaseId.value = null
 
+    let preparedPhoto: PreparedPhotoUpload
     try {
-      const compressedBlob = await compressImage(file)
-      const mimeType = compressedBlob.type || 'image/webp'
-      const fileBase64 = await blobToBase64(compressedBlob)
+      preparedPhoto = await preparePhotoUpload(file)
+    }
+    catch {
+      toast.add({ title: 'Error al procesar la foto', color: 'error' })
+      return
+    }
 
-      await requestFetch(`/api/purchases/${purchaseId}/photos`, {
-        method: 'POST',
-        body: {
-          fileBase64,
-          mimeType
-        }
-      })
-
-      await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
-      toast.add({ title: 'Foto subida' })
-      await refreshPhotos()
+    try {
+      await uploadPhotoForPurchase(purchaseId, preparedPhoto)
+      // For pending purchases, uploadPhotoForPurchase returns early without error
+      // Check if this was a pending purchase and show appropriate message
+      if (typeof purchaseId === 'string' || !Number.isFinite(purchaseId)) {
+        toast.add({ title: 'Foto guardada localmente - se subirá cuando la compra se sincronice.' })
+      }
     }
     catch (_err) {
+      if (isOfflineQueuedError(_err)) {
+        // Add to pending photos store for preview
+        pendingPhotos.addPhoto(purchaseId, preparedPhoto.compressedBlob, preparedPhoto.mimeType, preparedPhoto.fileBase64)
+        const numericPurchaseId = Number(purchaseId)
+        if (Number.isFinite(numericPurchaseId) && !queuedPhotoCandidates.value.includes(numericPurchaseId)) {
+          queuedPhotoCandidates.value = [...queuedPhotoCandidates.value, numericPurchaseId]
+        }
+        toast.add({ title: 'Sin conexión — la foto se subirá al reconectarte.' })
+        return
+      }
       toast.add({
         title: getSpanishApiErrorMessage(_err) ?? 'Error al subir foto',
         color: 'error'
@@ -431,17 +1185,45 @@ const onPhotoInputChange = async (event: Event) => {
   }
   // Pending upload from edit dialog
   else if (editingPurchaseId.value) {
-    try {
-      const compressedBlob = await compressImage(file)
-      pendingPhotosToUpload.value.push({
-        blob: compressedBlob,
-        mimeType: compressedBlob.type || 'image/webp'
-      })
-      toast.add({ title: 'Foto agregada (se subirá al guardar)' })
+    const purchaseId = editingPurchaseId.value
+
+    // Check if we can add more pending photos
+    const pendingCount = pendingPhotos.getPhotosByPurchaseId(purchaseId).length
+    const uploadedCount = filteredPhotoList.value.length
+    if (uploadedCount + pendingCount >= 3) {
+      toast.add({ title: 'Máximo de 3 fotos permitidas.', color: 'error' })
+      return
     }
-    catch (_err) {
+
+    let preparedPhoto: PreparedPhotoUpload
+    try {
+      preparedPhoto = await preparePhotoUpload(file)
+    }
+    catch {
+      toast.add({ title: 'Error al procesar la foto', color: 'error' })
+      return
+    }
+
+    try {
+      await uploadPhotoForPurchase(purchaseId, preparedPhoto)
+      // For pending purchases, uploadPhotoForPurchase returns early without error
+      // Check if this was a pending purchase and show appropriate message
+      if (typeof purchaseId === 'string' || !Number.isFinite(purchaseId)) {
+        toast.add({ title: 'Foto guardada localmente - se subirá cuando la compra se sincronice.' })
+      }
+    }
+    catch (err) {
+      if (isOfflineQueuedError(err)) {
+        pendingPhotos.addPhoto(purchaseId, preparedPhoto.compressedBlob, preparedPhoto.mimeType, preparedPhoto.fileBase64)
+        if (!queuedPhotoCandidates.value.includes(purchaseId)) {
+          queuedPhotoCandidates.value = [...queuedPhotoCandidates.value, purchaseId]
+        }
+        toast.add({ title: 'Sin conexión — la foto se subirá al reconectarte.' })
+        return
+      }
+
       toast.add({
-        title: getSpanishApiErrorMessage(_err) ?? 'Error al procesar la foto',
+        title: getSpanishApiErrorMessage(err) ?? 'Error al subir foto',
         color: 'error'
       })
     }
@@ -454,10 +1236,10 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
   if (!confirm('¿Eliminar esta foto?')) return
 
   try {
-    await requestFetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
+    await offlineFetch(`/api/purchases/${purchaseId}/photos/${slot}`, {
       method: 'DELETE'
     })
-    await queryCache.invalidateQueries(purchasesPageQuery(currentPage.value, pageSize.value, historyFilter.value))
+    await queryCache.invalidateQueries({ key: ['purchases'] })
 
     if (selectedPreviewPurchase.value?.id === purchaseId && selectedPreviewSlot.value === slot) {
       const nextSlot = (selectedPreviewPurchase.value.photoSlots ?? []).filter(currentSlot => currentSlot !== slot)[0]
@@ -471,14 +1253,175 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
     toast.add({ title: 'Foto eliminada' })
     await refreshPhotos()
   }
-  catch {
+  catch (err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      return
+    }
     toast.add({ title: 'Error al eliminar foto', color: 'error' })
   }
 }
 
 const purchaseList = computed(() => (purchasesResponse.value?.purchases ?? []) as Purchase[])
 
-const pagination = computed(() => purchasesResponse.value?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 1 })
+const getMergedPhotoSlots = (purchase: Purchase) => {
+  const persisted = Array.isArray(purchase.photoSlots)
+    ? purchase.photoSlots.map(slot => Number(slot)).filter(slot => Number.isFinite(slot) && slot > 0)
+    : []
+
+  const pendingPreviewCount = getPendingPhotosForPurchase(purchase.id).length
+  const hasPendingPreviews = pendingPreviewCount > 0
+  const hasQueuedCandidate = queuedPhotoCandidates.value.includes(Number(purchase.id))
+
+  // Only use optimistic slots for synced (numeric ID) purchases
+  // For pending purchases (UUID), we should only show pending photos from the store
+  const isPendingPurchase = typeof purchase.id === 'string' || !Number.isFinite(Number(purchase.id))
+  // IMPORTANT: while a photo is still pending/queued and visible as a preview,
+  // do NOT also inject optimistic uploaded slots, otherwise UI shows
+  // broken/duplicated slots (uploaded placeholder + pending preview).
+  const optimistic = !isPendingPurchase && !hasPendingPreviews && hasQueuedCandidate
+    ? (optimisticPhotoSlotsByPurchase.value[purchase.id] ?? [])
+    : []
+
+  return Array.from(new Set([...persisted, ...optimistic])).sort((a, b) => a - b)
+}
+
+const addOptimisticUploadedSlot = (purchaseId: number) => {
+  const purchase = purchaseList.value.find(item => Number(item.id) === Number(purchaseId))
+  if (!purchase) {
+    return false
+  }
+
+  // Guard: only add optimistic slots for synced (numeric ID) purchases
+  const isPendingPurchase = typeof purchase.id === 'string' || !Number.isFinite(Number(purchase.id))
+  if (isPendingPurchase) {
+    return false
+  }
+
+  const merged = getMergedPhotoSlots(purchase)
+  if (merged.length >= 3) {
+    return false
+  }
+
+  const nextSlot = [1, 2, 3].find(slot => !merged.includes(slot))
+  if (nextSlot == null) {
+    return false
+  }
+
+  const currentOptimistic = optimisticPhotoSlotsByPurchase.value[purchase.id] ?? []
+  optimisticPhotoSlotsByPurchase.value = {
+    ...optimisticPhotoSlotsByPurchase.value,
+    [purchase.id]: [...currentOptimistic, nextSlot].sort((a, b) => a - b)
+  }
+
+  return true
+}
+
+const uploadPendingPhotosForSyncedPurchases = async () => {
+  const allPendingPhotos = [...pendingPhotos.pendingPhotos]
+  if (allPendingPhotos.length === 0) {
+    return
+  }
+
+  const photosToUpload: Array<{ purchaseId: number | string, photo: typeof allPendingPhotos[0] }> = []
+
+  // Separate photos by purchase ID and check if they should be uploaded
+  for (const photo of allPendingPhotos) {
+    const purchaseId = photo.purchaseId
+    const isNumericId = typeof purchaseId === 'number' || Number.isFinite(Number(purchaseId))
+    const numericId = Number(purchaseId)
+
+    // Only upload photos for synced (numeric ID) purchases
+    if (isNumericId && Number.isFinite(numericId) && numericId > 0) {
+      // Check if this purchase exists in the list
+      const purchase = purchaseList.value.find(p => Number(p.id) === numericId)
+      if (purchase) {
+        photosToUpload.push({ purchaseId: numericId, photo })
+      }
+      else {
+        // Purchase not found, might still be syncing - keep trying
+      }
+    }
+    else {
+      // This is a pending purchase (UUID ID), keep the photo for later
+    }
+  }
+
+  // Queue photos for upload
+  for (const { purchaseId, photo } of photosToUpload) {
+    // Check if already queued
+    const alreadyQueued = offlineQueue.queue.some(item =>
+      item.url === `/api/purchases/${purchaseId}/photos`
+      && (item.body as { fileBase64?: unknown } | undefined)?.fileBase64 === photo.fileBase64
+    )
+
+    if (!alreadyQueued) {
+      offlineQueue.enqueue({
+        method: 'POST',
+        url: `/api/purchases/${purchaseId}/photos`,
+        body: {
+          fileBase64: photo.fileBase64,
+          mimeType: photo.mimeType
+        }
+      })
+    }
+  }
+
+  // Trigger upload of queued photos by invalidating queries
+  // This will cause the queue to process when useOfflineFetch runs
+  if (photosToUpload.length > 0) {
+    // Force a small delay to ensure queue items are in place before attempting flush
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+}
+
+const promoteQueuedPhotoCandidates = () => {
+  if (queuedPhotoCandidates.value.length === 0) {
+    return
+  }
+
+  const unresolvedCandidates: number[] = []
+  for (const purchaseId of queuedPhotoCandidates.value) {
+    const promoted = addOptimisticUploadedSlot(purchaseId)
+    if (!promoted) {
+      unresolvedCandidates.push(purchaseId)
+    }
+  }
+
+  queuedPhotoCandidates.value = unresolvedCandidates
+}
+
+const pruneStaleOptimisticPhotoSlots = () => {
+  const next: Record<number | string, number[]> = {}
+
+  for (const key in optimisticPhotoSlotsByPurchase.value) {
+    const purchaseId = Number(key)
+    if (isNaN(purchaseId)) {
+      // This is a non-numeric key, skip it (shouldn't happen but be safe)
+      continue
+    }
+
+    if (!Number.isFinite(purchaseId) || purchaseId <= 0) {
+      continue
+    }
+
+    const optimisticSlots = optimisticPhotoSlotsByPurchase.value[purchaseId] ?? []
+    if (!optimisticSlots.length) {
+      continue
+    }
+
+    const hasPendingPreviews = getPendingPhotosForPurchase(purchaseId).length > 0
+    const hasQueuedCandidate = queuedPhotoCandidates.value.includes(purchaseId)
+
+    // Keep optimistic slots only for purchases that no longer show pending
+    // previews but are still marked as recently synced candidates.
+    if (!hasPendingPreviews && hasQueuedCandidate) {
+      next[purchaseId] = optimisticSlots
+    }
+  }
+
+  optimisticPhotoSlotsByPurchase.value = next
+}
 
 const isSubmitting = computed(() => addingPurchase.value || editingPurchase.value)
 
@@ -505,14 +1448,15 @@ const resetForm = () => {
   form.notes = ''
   form.price = ''
   editingPurchaseId.value = null
+  currentEditingPurchase.value = null
   selectedPhotoPurchaseId.value = null
   isEditPurchaseDialogOpen.value = false
   isAddPurchaseDialogOpen.value = false
-  // Revoke preview URLs to free memory
-  pendingPhotosPreviews.value.forEach((preview) => {
-    URL.revokeObjectURL(preview.previewUrl)
-  })
-  pendingPhotosToUpload.value = []
+  // Clear photos with purchaseId 0 (temporary photos for new purchases)
+  const photosWithId0 = pendingPhotos.getPhotosByPurchaseId(0)
+  for (const photo of photosWithId0) {
+    pendingPhotos.removePhoto(photo.id)
+  }
 }
 
 const closeEditModal = () => {
@@ -534,15 +1478,19 @@ const isEditModalOpen = computed({
 
 const startAddingPurchase = () => {
   resetForm()
-  pendingPhotosToUpload.value = []
   isAddPurchaseDialogOpen.value = true
 }
 
 const startEditing = (purchase: Purchase) => {
   isEditPurchaseDialogOpen.value = true
-  editingPurchaseId.value = purchase.id
-  selectedPhotoPurchaseId.value = purchase.id
-  pendingPhotosToUpload.value = []
+  currentEditingPurchase.value = purchase
+  editingPurchaseId.value = Number(purchase.id)
+  selectedPhotoPurchaseId.value = Number(purchase.id)
+  // Clear photos with purchaseId 0 (temporary photos for new purchases)
+  const photosWithId0 = pendingPhotos.getPhotosByPurchaseId(0)
+  for (const photo of photosWithId0) {
+    pendingPhotos.removePhoto(photo.id)
+  }
   form.brand = purchase.brand
   form.category = purchase.category
   form.productType = purchase.productType
@@ -561,50 +1509,165 @@ const savePurchase = () => {
   addPurchase()
 }
 
-const confirmAndDelete = (purchase: Purchase) => {
-  const confirmed = window.confirm(`¿Eliminar la compra de ${purchase.brand} (${purchase.productType}, talla ${purchase.sizeLabel})?`)
-  if (!confirmed) {
+const executePurchaseDeletion = (purchase: Purchase) => {
+  const isPendingLocalPurchase = typeof purchase.id === 'string' || !Number.isFinite(Number(purchase.id))
+  if (isPendingLocalPurchase) {
+    pendingPhotos.clearPhotosByPurchaseId(purchase.id)
+    pendingPurchases.removePurchaseByBrand(
+      purchase.brand,
+      purchase.category,
+      purchase.productType,
+      purchase.sizeLabel
+    )
+    resetForm()
+    toast.add({ title: 'Compra pendiente eliminada.' })
     return
   }
 
-  deletingPurchaseId.value = purchase.id
+  deletingPurchaseId.value = Number(purchase.id)
   removePurchase(purchase)
+}
+
+const openDeletePurchaseDialog = (purchase: Purchase) => {
+  pendingDeletionPurchase.value = purchase
+  isDeletePurchaseDialogOpen.value = true
+}
+
+const closeDeletePurchaseDialog = () => {
+  isDeletePurchaseDialogOpen.value = false
+  pendingDeletionPurchase.value = null
+}
+
+const confirmDeletePurchase = () => {
+  if (!pendingDeletionPurchase.value) {
+    return
+  }
+
+  executePurchaseDeletion(pendingDeletionPurchase.value)
+  closeDeletePurchaseDialog()
+}
+
+const deleteCurrentEditingPurchase = () => {
+  if (!currentEditingPurchase.value) {
+    return
+  }
+
+  const purchase = currentEditingPurchase.value
+  openDeletePurchaseDialog(purchase)
 }
 
 const filteredPhotoList = computed(() => (photoList.value ?? []) as PurchasePhoto[])
 
 const pendingPhotosPreviews = computed<PendingPhotoPreview[]>(() => {
-  return pendingPhotosToUpload.value.map(photo => ({
-    file: photo.blob as unknown as File,
-    previewUrl: URL.createObjectURL(photo.blob)
+  const purchaseId = editingPurchaseId.value
+  if (!purchaseId) {
+    return []
+  }
+
+  const queuedPreviews = getQueuedPendingPhotoPreviews(offlineQueue.queue, purchaseId)
+  if (queuedPreviews.length > 0) {
+    return queuedPreviews.map(photo => ({
+      id: photo.id,
+      source: 'queue',
+      file: {} as File,
+      previewUrl: photo.previewUrl
+    }))
+  }
+
+  const localPreviews = pendingPhotos.getPhotoPreviewsByPurchaseId(purchaseId)
+  return localPreviews.map(photo => ({
+    id: photo.id,
+    source: 'local',
+    file: {} as File,
+    previewUrl: photo.previewUrl
   }))
 })
 
 const removePendingPhoto = (index: number) => {
   const preview = pendingPhotosPreviews.value[index]
-  if (preview) {
-    URL.revokeObjectURL(preview.previewUrl)
+  if (!preview) {
+    return
   }
-  pendingPhotosToUpload.value.splice(index, 1)
+
+  if (preview.source === 'queue') {
+    const queueId = preview.id.startsWith('queue-') ? preview.id.replace(/^queue-/, '') : preview.id
+    offlineQueue.dequeue(queueId)
+    return
+  }
+
+  if (preview.source === 'local') {
+    pendingPhotos.removePhoto(preview.id)
+  }
+}
+
+const getPendingPhotosForPurchase = (purchaseId: number | string) => {
+  const numericId = Number(purchaseId)
+  const queuedPending = getQueuedPendingPhotoPreviews(offlineQueue.queue, numericId)
+  if (queuedPending.length > 0) {
+    return queuedPending
+  }
+
+  const localPending = pendingPhotos.getPhotoPreviewsByPurchaseId(purchaseId)
+  return localPending
 }
 
 const fmt = (value: number, unit: string) => `${value.toFixed(1)} ${unit}`
 
+type PhotoGridItem = {
+  type: 'uploaded' | 'pending' | 'empty'
+  slot?: number
+  id?: string
+  previewUrl?: string
+}
+
+const getPhotoGridItems = (purchase: Purchase): PhotoGridItem[] => {
+  const items: PhotoGridItem[] = []
+  const mergedPhotoSlots = getMergedPhotoSlots(purchase)
+
+  // Add uploaded photos first
+  for (const slot of [1, 2, 3]) {
+    if (mergedPhotoSlots.includes(slot)) {
+      items.push({ type: 'uploaded', slot })
+    }
+  }
+
+  // Add pending photos
+  const pendingPhotos = getPendingPhotosForPurchase(purchase.id)
+  for (const photo of pendingPhotos) {
+    items.push({ type: 'pending', id: photo.id, previewUrl: photo.previewUrl })
+  }
+
+  // Fill remaining slots with empty placeholders
+  while (items.length < 3) {
+    items.push({ type: 'empty' })
+  }
+
+  return items
+}
+
 const canAddMorePhotos = (purchase: Purchase) => {
-  return (purchase.photoSlots?.length ?? 0) < 3
+  return getMergedPhotoSlots(purchase).length < 3
 }
 
-const goToPage = (page: number) => {
-  currentPage.value = Math.max(1, Math.min(page, pagination.value.totalPages))
-}
+watch(syncedPhotoPurchases, (ids) => {
+  if (!ids.length) {
+    return
+  }
 
-const goToPreviousPage = () => {
-  goToPage(currentPage.value - 1)
-}
+  const candidates = new Set(queuedPhotoCandidates.value)
+  for (const purchaseId of ids) {
+    if (!addOptimisticUploadedSlot(purchaseId)) {
+      candidates.add(purchaseId)
+    }
+  }
 
-const goToNextPage = () => {
-  goToPage(currentPage.value + 1)
-}
+  queuedPhotoCandidates.value = [...candidates]
+})
+
+watch(purchaseList, () => {
+  pruneStaleOptimisticPhotoSlots()
+  promoteQueuedPhotoCandidates()
+})
 
 const diffRows = computed<RowDiff[]>(() => {
   const snapshot = selectedComparison.value?.snapshotAtPurchase
@@ -670,14 +1733,18 @@ const diffRows = computed<RowDiff[]>(() => {
         >
           Añadir compra
         </UButton>
-        <div v-if="!hasMeasurements" class="space-y-2">
+        <div
+          v-if="!hasMeasurements"
+          class="space-y-2"
+        >
           <p class="text-sm text-muted">
-            Necesitas registrar al menos una medida corporal para poder comparar cómo ha cambiado tu cuerpo después de la compra.
+            Necesitas registrar al menos una medida corporal para poder comparar cómo ha cambiado tu cuerpo después de
+            la compra.
           </p>
           <UButton
             type="button"
             icon="i-lucide-plus"
-            @click="router.push('/measurements')"
+            @click="() => { void router.push('/measurements') }"
           >
             Añadir medidas
           </UButton>
@@ -698,20 +1765,33 @@ const diffRows = computed<RowDiff[]>(() => {
         <li
           v-for="purchase in purchaseList"
           :key="purchase.id"
+          :data-db-id="purchase.id"
           class="py-3 space-y-3"
         >
           <div data-testid="purchase-info">
-            <p
-              data-testid="purchase-summary"
-              class="font-medium"
-            >
-              {{ purchase.brand }} · {{ purchase.productType }} · Talla {{ purchase.sizeLabel }}
-            </p>
+            <div class="flex items-center gap-2">
+              <p
+                data-testid="purchase-summary"
+                class="font-medium"
+              >
+                {{ purchase.brand }} · {{ purchase.productType }} · Talla {{ purchase.sizeLabel }}
+              </p>
+              <UBadge
+                v-if="purchase.isPending"
+                color="warning"
+                variant="subtle"
+                data-testid="purchase-pending-indicator"
+              >
+                Pendiente
+              </UBadge>
+            </div>
             <p
               data-testid="purchase-details"
               class="text-sm text-muted"
             >
-              {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template v-if="purchase.price != null">
+              {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template
+                v-if="purchase.price != null"
+              >
                 · {{ purchase.price.toFixed(2) }} €
               </template>
             </p>
@@ -723,41 +1803,64 @@ const diffRows = computed<RowDiff[]>(() => {
             </p>
 
             <div
-              v-if="purchase.photoSlots?.length || canAddMorePhotos(purchase)"
+              v-if="purchase.photoSlots?.length || canAddMorePhotos(purchase) || getPendingPhotosForPurchase(purchase.id).length > 0"
               class="mt-2 grid grid-cols-3 gap-2"
             >
-              <button
-                v-for="slot in [1, 2, 3]"
-                :key="`photo-${purchase.id}-${slot}`"
-                type="button"
-                :class="[
-                  'w-full rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  purchase.photoSlots?.includes(slot)
-                    ? 'aspect-square overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700'
-                    : 'h-8 sm:h-10 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center align-center my-auto'
-                ]"
-                :aria-label="purchase.photoSlots?.includes(slot) ? `Abrir foto ${slot} de ${purchase.brand}` : `Añadir foto ${slot}`"
-                @click="purchase.photoSlots?.includes(slot) ? openPreview(purchase, slot) : openEditAndAddPhoto(purchase)"
+              <!-- Unified photo grid: uploaded + pending + empty slots -->
+              <template
+                v-for="item in getPhotoGridItems(purchase)"
+                :key="`${item.type}-${item.slot || item.id}`"
               >
-                <img
-                  v-if="purchase.photoSlots?.includes(slot)"
-                  :src="buildPhotoUrl(purchase.id, slot)"
-                  :alt="`Foto ${slot} de ${purchase.brand}`"
-                  class="size-full object-cover"
-                  loading="lazy"
+                <!-- Uploaded photo -->
+                <button
+                  v-if="item.type === 'uploaded'"
+                  type="button"
+                  class="w-full rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary aspect-square overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
+                  :aria-label="`Abrir foto ${item.slot} de ${purchase.brand}`"
+                  @click="openPreview(purchase, item.slot!)"
                 >
+                  <img
+                    :src="buildPhotoUrl(purchase.id, item.slot!)"
+                    :alt="`Foto ${item.slot} de ${purchase.brand}`"
+                    class="size-full object-cover"
+                  >
+                </button>
+
+                <!-- Pending photo -->
                 <div
-                  v-else
-                  class="flex items-center justify-center gap-2"
+                  v-else-if="item.type === 'pending'"
+                  class="relative aspect-square overflow-hidden rounded-md border-2 border-dashed border-amber-400 dark:border-amber-600"
                 >
-                  <span class="text-2xl text-gray-400">+</span>
-                  <span class="text-xs text-gray-400">Foto</span>
+                  <img
+                    :src="item.previewUrl"
+                    :alt="'Foto pendiente'"
+                    class="size-full rounded-md object-cover opacity-50"
+                    loading="lazy"
+                  >
+                  <div class="absolute inset-0 flex items-center justify-center bg-amber-500/30">
+                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-100">Por subir</span>
+                  </div>
                 </div>
-              </button>
+
+                <!-- Empty slot placeholder -->
+                <button
+                  v-else
+                  type="button"
+                  class="w-full rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-8 sm:h-10 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center align-center my-auto"
+                  :aria-label="`Añadir foto`"
+                  :disabled="!canAddPhoto(purchase)"
+                  @click="openEditAndAddPhoto(purchase)"
+                >
+                  <div class="flex items-center justify-center gap-2">
+                    <span class="text-2xl text-gray-400">+</span>
+                    <span class="text-xs text-gray-400">Foto</span>
+                  </div>
+                </button>
+              </template>
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-3 gap-2">
             <UButton
               variant="soft"
               color="neutral"
@@ -777,6 +1880,15 @@ const diffRows = computed<RowDiff[]>(() => {
             >
               Comparar medidas
             </UButton>
+            <UButton
+              variant="soft"
+              color="error"
+              icon="i-lucide-trash"
+              class="h-10 w-full justify-center text-center sm:h-10"
+              @click="openDeletePurchaseDialog(purchase)"
+            >
+              Eliminar
+            </UButton>
           </div>
         </li>
       </ul>
@@ -786,36 +1898,6 @@ const diffRows = computed<RowDiff[]>(() => {
       >
         No hay compras que coincidan con el filtro.
       </p>
-
-      <!-- Pagination Controls -->
-      <div
-        v-if="pagination.totalPages > 1"
-        class="mt-6 flex items-center justify-between gap-4"
-      >
-        <div class="text-sm text-muted">
-          Página {{ pagination.page }} de {{ pagination.totalPages }} · {{ pagination.total }} compras
-        </div>
-        <div class="flex gap-2">
-          <UButton
-            variant="outline"
-            color="neutral"
-            icon="i-lucide-chevron-left"
-            :disabled="pagination.page <= 1"
-            @click="goToPreviousPage"
-          >
-            Anterior
-          </UButton>
-          <UButton
-            variant="outline"
-            color="neutral"
-            icon="i-lucide-chevron-right"
-            :disabled="pagination.page >= pagination.totalPages"
-            @click="goToNextPage"
-          >
-            Siguiente
-          </UButton>
-        </div>
-      </div>
     </div>
 
     <!-- Add/Edit Purchase Dialog -->
@@ -996,7 +2078,6 @@ const diffRows = computed<RowDiff[]>(() => {
                       :src="`/api/purchases/${editingPurchaseId}/photos/${item.slot}`"
                       :alt="`Foto ${item.slot}`"
                       class="size-full rounded-md object-cover"
-                      loading="lazy"
                     >
                     <UButton
                       class="absolute right-1 top-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
@@ -1012,16 +2093,16 @@ const diffRows = computed<RowDiff[]>(() => {
                   <div
                     v-for="(pending, index) in pendingPhotosPreviews"
                     :key="`pending-${index}`"
-                    class="relative aspect-square overflow-hidden rounded-md group border-2 border-dashed border-primary"
+                    class="relative aspect-square overflow-hidden rounded-md group border-2 border-dashed border-amber-400 dark:border-amber-600"
                   >
                     <img
                       :src="pending.previewUrl"
                       :alt="pending.file.name"
-                      class="size-full rounded-md object-cover opacity-75"
+                      class="size-full rounded-md object-cover opacity-50"
                       loading="lazy"
                     >
-                    <div class="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <span class="text-xs font-medium text-white">Por subir</span>
+                    <div class="absolute inset-0 flex items-center justify-center bg-amber-500/30">
+                      <span class="text-sm font-semibold text-amber-900 dark:text-amber-100">Por subir</span>
                     </div>
                     <UButton
                       class="absolute right-1 top-1 opacity-100"
@@ -1051,7 +2132,7 @@ const diffRows = computed<RowDiff[]>(() => {
                 variant="soft"
                 icon="i-lucide-trash"
                 :loading="deletingPurchase && deletingPurchaseId === editingPurchaseId"
-                @click="() => { if (editingPurchaseId) { confirmAndDelete(purchaseList.find(p => p.id === editingPurchaseId)!) } }"
+                @click="deleteCurrentEditingPurchase"
               >
                 Eliminar compra
               </UButton>
@@ -1070,6 +2151,39 @@ const diffRows = computed<RowDiff[]>(() => {
       </template>
     </UModal>
 
+    <UModal v-model:open="isDeletePurchaseDialogOpen">
+      <template #content>
+        <div class="space-y-4 p-4 sm:p-6">
+          <h3 class="text-lg font-medium">
+            Confirmar eliminación
+          </h3>
+
+          <p class="text-sm text-muted">
+            ¿Seguro que quieres eliminar esta compra?
+          </p>
+
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              type="button"
+              color="error"
+              icon="i-lucide-trash"
+              @click="confirmDeletePurchase"
+            >
+              Eliminar
+            </UButton>
+            <UButton
+              type="button"
+              color="neutral"
+              variant="soft"
+              @click="closeDeletePurchaseDialog"
+            >
+              Cancelar
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
     <UModal v-model:open="isComparisonDialogOpen">
       <template #content>
         <div
@@ -1078,7 +2192,8 @@ const diffRows = computed<RowDiff[]>(() => {
         >
           <div class="flex items-start justify-between gap-3">
             <h3 class="font-medium">
-              Comparativa de medidas · {{ selectedPurchase.brand }} {{ selectedPurchase.productType }} ({{ selectedPurchase.sizeLabel }})
+              Comparativa de medidas · {{ selectedPurchase.brand }} {{ selectedPurchase.productType }} ({{
+                selectedPurchase.sizeLabel }})
             </h3>
             <UButton
               color="neutral"
@@ -1094,6 +2209,15 @@ const diffRows = computed<RowDiff[]>(() => {
             variant="soft"
             icon="i-lucide-alert-circle"
             :title="selectedComparison.error"
+          />
+
+          <UAlert
+            v-else-if="selectedComparison.offline"
+            color="warning"
+            variant="soft"
+            icon="i-lucide-wifi-off"
+            title="Sin conexión"
+            description="Se muestra la comparación entre tu medida más cercana a la fecha de compra y tus medidas actuales almacenadas localmente."
           />
 
           <UAlert
@@ -1114,8 +2238,20 @@ const diffRows = computed<RowDiff[]>(() => {
               description="Registra medidas regulares para comparar cómo ha cambiado tu cuerpo después de cada compra."
             />
 
-            <div v-else-if="!selectedComparison.snapshotAtPurchase && selectedComparison.availableMeasurements?.length" class="space-y-3">
+            <div
+              v-else-if="!selectedComparison.snapshotAtPurchase && selectedComparison.availableMeasurements?.length"
+              class="space-y-3"
+            >
               <UAlert
+                v-if="selectedComparison.offline"
+                color="warning"
+                variant="soft"
+                icon="i-lucide-wifi-off"
+                title="Sin conexión"
+                description="La comparación completa estará disponible cuando te reconectes. Se muestran tus medidas actuales almacenadas localmente."
+              />
+              <UAlert
+                v-else
                 color="info"
                 variant="soft"
                 icon="i-lucide-info"
@@ -1123,7 +2259,9 @@ const diffRows = computed<RowDiff[]>(() => {
                 description="Selecciona una medida para asociarla al día de la compra y comparar cómo ha cambiado tu cuerpo."
               />
               <div class="space-y-2">
-                <p class="text-sm font-medium">Medidas disponibles:</p>
+                <p class="text-sm font-medium">
+                  Medidas disponibles:
+                </p>
                 <div class="space-y-2 max-h-60 overflow-y-auto">
                   <UButton
                     v-for="measurement in selectedComparison.availableMeasurements"
@@ -1131,7 +2269,8 @@ const diffRows = computed<RowDiff[]>(() => {
                     variant="soft"
                     class="w-full justify-start"
                     :loading="linkingMeasurement"
-                    @click="linkMeasurementToPurchase({ purchaseId: selectedPurchase!.id, measurementId: measurement.id })"
+                    :disabled="selectedComparison.offline"
+                    @click="linkMeasurementToPurchase({ purchaseId: Number(selectedPurchase!.id), measurementId: measurement.id })"
                   >
                     {{ new Date(measurement.recordedAt).toLocaleDateString() }} - {{ measurement.weightKg }} kg
                   </UButton>
@@ -1269,5 +2408,16 @@ const diffRows = computed<RowDiff[]>(() => {
         </div>
       </template>
     </UModal>
+
+    <UButton
+      v-if="showScrollToTopButton"
+      type="button"
+      icon="i-lucide-arrow-up"
+      color="primary"
+      size="xl"
+      class="fixed bottom-5 right-5 z-50 rounded-full shadow-lg"
+      aria-label="Subir al inicio"
+      @click="scrollToTop"
+    />
   </div>
 </template>

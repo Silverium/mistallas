@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { measurementsQuery } from '~/queries/measurements'
+import { useOfflineRouteAccess } from '~/utils/offline-route-access'
 
 definePageMeta({
   middleware: 'auth'
@@ -15,7 +16,7 @@ type Measurement = { [K in MeasurementFieldKey]: number | null } & {
 
 const toast = useToast()
 const queryCache = useQueryCache()
-const requestFetch = useRequestFetch()
+const offlineFetch = useOfflineFetch()
 
 const form = reactive({
   weightKg: '',
@@ -94,14 +95,16 @@ const closeEdit = () => {
 }
 
 const { loggedIn } = useUserSession()
+const isHydrated = ref(false)
+const offlineRouteAccess = useOfflineRouteAccess()
 
 const { data: measurements } = useQuery({
   ...measurementsQuery,
-  enabled: () => loggedIn.value
+  enabled: () => (loggedIn.value || offlineRouteAccess.value) && isHydrated.value
 })
 
 const { mutate: addMeasurement, isLoading: adding } = useMutation({
-  mutation: () => requestFetch('/api/measurements', {
+  mutation: () => offlineFetch('/api/measurements', {
     method: 'POST',
     body: {
       weightKg: Number(form.weightKg),
@@ -124,6 +127,11 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
     toast.add({ title: 'Medida guardada correctamente.' })
   },
   onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      resetForm()
+      return
+    }
     if (isNuxtZodError(err)) {
       const title = err.data?.data.issues.map(issue => issue.message).join('\n')
       if (title) {
@@ -136,15 +144,22 @@ const { mutate: addMeasurement, isLoading: adding } = useMutation({
 })
 
 const { mutate: removeMeasurement } = useMutation({
-  mutation: (id: number) => requestFetch(`/api/measurements/${id}`, { method: 'DELETE' }),
+  mutation: (id: number) => offlineFetch(`/api/measurements/${id}`, { method: 'DELETE' }),
   async onSuccess() {
     await queryCache.invalidateQueries(measurementsQuery)
     toast.add({ title: 'Medida eliminada.' })
+  },
+  onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      return
+    }
+    toast.add({ title: 'No se pudo eliminar la medida.', color: 'error' })
   }
 })
 
 const { mutate: updateMeasurement, isLoading: updating } = useMutation({
-  mutation: () => requestFetch(`/api/measurements/${editingId.value}`, {
+  mutation: () => offlineFetch(`/api/measurements/${editingId.value}`, {
     method: 'PATCH',
     body: {
       weightKg: editForm.weightKg ? Number(editForm.weightKg) : undefined,
@@ -168,6 +183,11 @@ const { mutate: updateMeasurement, isLoading: updating } = useMutation({
     toast.add({ title: 'Medida actualizada.' })
   },
   onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      closeEdit()
+      return
+    }
     if (isNuxtZodError(err)) {
       const title = err.data?.data.issues.map((issue: { message: string }) => issue.message).join('\n')
       if (title) {
@@ -193,7 +213,7 @@ const { mutate: uploadMeasurements, isLoading: uploading } = useMutation({
       throw new Error('El JSON debe ser una colección de medidas.')
     }
 
-    return requestFetch<{ uploaded: number }>('/api/measurements/upload', {
+    return offlineFetch<{ uploaded: number }>('/api/measurements/upload', {
       method: 'POST',
       body: {
         measurements: parsed
@@ -206,6 +226,10 @@ const { mutate: uploadMeasurements, isLoading: uploading } = useMutation({
     toast.add({ title: `Se subieron ${result.uploaded} medidas.` })
   },
   onError(err) {
+    if (isOfflineQueuedError(err)) {
+      toast.add({ title: 'Sin conexión — se sincronizará al reconectarte.' })
+      return
+    }
     if (isNuxtZodError(err)) {
       const issues = (err.data?.data as { issues?: Array<{ message: string }> } | undefined)?.issues
       const title = issues?.map(issue => issue.message).join('\n')
@@ -223,6 +247,10 @@ const { mutate: uploadMeasurements, isLoading: uploading } = useMutation({
 })
 
 const formattedMeasurements = computed(() => (measurements.value ?? []) as Measurement[])
+
+onMounted(() => {
+  isHydrated.value = true
+})
 </script>
 
 <template>
@@ -235,7 +263,11 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         Guarda tu historial para comparar cómo cambiaste entre compras.
       </p>
       <div class="mt-3">
-        <UButton type="button" icon="i-lucide-plus" @click="() => { isAddMeasurementDialogOpen = true }">
+        <UButton
+          type="button"
+          icon="i-lucide-plus"
+          @click="() => { isAddMeasurementDialogOpen = true }"
+        >
           Añadir medida
         </UButton>
       </div>
@@ -251,27 +283,110 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
             </h3>
           </div>
 
-          <form class="grid grid-cols-1 sm:grid-cols-2 gap-3" @submit.prevent="addMeasurement()">
-            <UInput v-model="form.weightKg" type="number" step="0.1" min="1" placeholder="Peso (kg) *" required
-              autofocus />
-            <UInput v-model="form.heightCm" type="number" step="0.1" min="1" placeholder="Altura (cm)" />
-            <UInput v-model="form.chestCm" type="number" step="0.1" min="1" placeholder="Pecho (cm)" />
-            <UInput v-model="form.waistCm" type="number" step="0.1" min="1" placeholder="Cintura (cm)" />
-            <UInput v-model="form.hipsCm" type="number" step="0.1" min="1" placeholder="Cadera (cm)" />
-            <UInput v-model="form.shoulderWidthCm" type="number" step="0.1" min="1"
-              placeholder="Ancho de hombros (cm)" />
-            <UInput v-model="form.sleeveLengthCm" type="number" step="0.1" min="1" placeholder="Largo de manga (cm)" />
-            <UInput v-model="form.neckCm" type="number" step="0.1" min="1" placeholder="Cuello (cm)" />
-            <UInput v-model="form.inseamCm" type="number" step="0.1" min="1" placeholder="Tiro (cm)" />
-            <UInput v-model="form.thighCm" type="number" step="0.1" min="1" placeholder="Muslo (cm)" />
-            <UInput v-model="form.footCm" type="number" step="0.1" min="1" placeholder="Pie (cm)" />
-            <UInput v-model="form.notes" placeholder="Notas (opcional)" />
+          <form
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            @submit.prevent="addMeasurement()"
+          >
+            <UInput
+              v-model="form.weightKg"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Peso (kg) *"
+              required
+              autofocus
+            />
+            <UInput
+              v-model="form.heightCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Altura (cm)"
+            />
+            <UInput
+              v-model="form.chestCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Pecho (cm)"
+            />
+            <UInput
+              v-model="form.waistCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Cintura (cm)"
+            />
+            <UInput
+              v-model="form.hipsCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Cadera (cm)"
+            />
+            <UInput
+              v-model="form.shoulderWidthCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Ancho de hombros (cm)"
+            />
+            <UInput
+              v-model="form.sleeveLengthCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Largo de manga (cm)"
+            />
+            <UInput
+              v-model="form.neckCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Cuello (cm)"
+            />
+            <UInput
+              v-model="form.inseamCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Tiro (cm)"
+            />
+            <UInput
+              v-model="form.thighCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Muslo (cm)"
+            />
+            <UInput
+              v-model="form.footCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Pie (cm)"
+            />
+            <UInput
+              v-model="form.notes"
+              placeholder="Notas (opcional)"
+            />
 
             <div class="sm:col-span-2 flex flex-wrap gap-2">
-              <UButton type="submit" icon="i-lucide-save" :loading="adding" :disabled="!form.weightKg">
+              <UButton
+                type="submit"
+                icon="i-lucide-save"
+                :loading="adding"
+                :disabled="!form.weightKg"
+              >
                 Guardar medida
               </UButton>
-              <UButton type="button" variant="soft" color="neutral" icon="i-lucide-x" @click="resetForm">
+              <UButton
+                type="button"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-x"
+                @click="resetForm"
+              >
                 Cancelar
               </UButton>
             </div>
@@ -282,19 +397,25 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
               Carga masiva (JSON)
             </h3>
             <div class="flex">
-
               <p class="text-sm text-muted">
                 Pega un arreglo JSON de medidas para subir historial en lote.
               </p>
-              <UButton icon="i-lucide-upload" :loading="uploading" :disabled="!bulkJson.trim()"
-                @click="uploadMeasurements()">
+              <UButton
+                icon="i-lucide-upload"
+                :loading="uploading"
+                :disabled="!bulkJson.trim()"
+                @click="uploadMeasurements()"
+              >
                 Subir medidas
               </UButton>
             </div>
 
-            <UTextarea v-model="bulkJson" :rows="6" class="w-full"
-              placeholder="[{&quot;weightKg&quot;:70,&quot;waistCm&quot;:82,&quot;recordedAt&quot;:&quot;2020-03-10&quot;},{&quot;weightKg&quot;:85,&quot;waistCm&quot;:94}]" />
-
+            <UTextarea
+              v-model="bulkJson"
+              :rows="6"
+              class="w-full"
+              placeholder="[{&quot;weightKg&quot;:70,&quot;waistCm&quot;:82,&quot;recordedAt&quot;:&quot;2020-03-10&quot;},{&quot;weightKg&quot;:85,&quot;waistCm&quot;:94}]"
+            />
           </div>
         </div>
       </template>
@@ -310,26 +431,115 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
             </h3>
           </div>
 
-          <form class="grid grid-cols-1 sm:grid-cols-2 gap-3" @submit.prevent="updateMeasurement()">
-            <UInput v-model="editForm.recordedAt" type="date" required class="sm:col-span-2" />
-            <UInput v-model="editForm.weightKg" type="number" step="0.1" min="1" placeholder="Peso (kg) *" required />
-            <UInput v-model="editForm.heightCm" type="number" step="0.1" min="1" placeholder="Altura (cm)" />
-            <UInput v-model="editForm.chestCm" type="number" step="0.1" min="1" placeholder="Pecho (cm)" />
-            <UInput v-model="editForm.waistCm" type="number" step="0.1" min="1" placeholder="Cintura (cm)" />
-            <UInput v-model="editForm.hipsCm" type="number" step="0.1" min="1" placeholder="Cadera (cm)" />
-            <UInput v-model="editForm.shoulderWidthCm" type="number" step="0.1" min="1" placeholder="Ancho de hombros (cm)" />
-            <UInput v-model="editForm.sleeveLengthCm" type="number" step="0.1" min="1" placeholder="Largo de manga (cm)" />
-            <UInput v-model="editForm.neckCm" type="number" step="0.1" min="1" placeholder="Cuello (cm)" />
-            <UInput v-model="editForm.inseamCm" type="number" step="0.1" min="1" placeholder="Tiro (cm)" />
-            <UInput v-model="editForm.thighCm" type="number" step="0.1" min="1" placeholder="Muslo (cm)" />
-            <UInput v-model="editForm.footCm" type="number" step="0.1" min="1" placeholder="Pie (cm)" />
-            <UInput v-model="editForm.notes" placeholder="Notas (opcional)" />
+          <form
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+            @submit.prevent="updateMeasurement()"
+          >
+            <UInput
+              v-model="editForm.recordedAt"
+              type="date"
+              required
+              class="sm:col-span-2"
+            />
+            <UInput
+              v-model="editForm.weightKg"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Peso (kg) *"
+              required
+            />
+            <UInput
+              v-model="editForm.heightCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Altura (cm)"
+            />
+            <UInput
+              v-model="editForm.chestCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Pecho (cm)"
+            />
+            <UInput
+              v-model="editForm.waistCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Cintura (cm)"
+            />
+            <UInput
+              v-model="editForm.hipsCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Cadera (cm)"
+            />
+            <UInput
+              v-model="editForm.shoulderWidthCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Ancho de hombros (cm)"
+            />
+            <UInput
+              v-model="editForm.sleeveLengthCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Largo de manga (cm)"
+            />
+            <UInput
+              v-model="editForm.neckCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Cuello (cm)"
+            />
+            <UInput
+              v-model="editForm.inseamCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Tiro (cm)"
+            />
+            <UInput
+              v-model="editForm.thighCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Muslo (cm)"
+            />
+            <UInput
+              v-model="editForm.footCm"
+              type="number"
+              step="0.1"
+              min="1"
+              placeholder="Pie (cm)"
+            />
+            <UInput
+              v-model="editForm.notes"
+              placeholder="Notas (opcional)"
+            />
 
             <div class="sm:col-span-2 flex flex-wrap gap-2">
-              <UButton type="submit" icon="i-lucide-save" :loading="updating" :disabled="!editForm.weightKg">
+              <UButton
+                type="submit"
+                icon="i-lucide-save"
+                :loading="updating"
+                :disabled="!editForm.weightKg"
+              >
                 Guardar cambios
               </UButton>
-              <UButton type="button" variant="soft" color="neutral" icon="i-lucide-x" @click="closeEdit">
+              <UButton
+                type="button"
+                variant="soft"
+                color="neutral"
+                icon="i-lucide-x"
+                @click="closeEdit"
+              >
                 Cancelar
               </UButton>
             </div>
@@ -343,25 +553,44 @@ const formattedMeasurements = computed(() => (measurements.value ?? []) as Measu
         Historial
       </h3>
       <ul class="divide-y divide-gray-200 dark:divide-gray-800">
-        <li v-for="item in formattedMeasurements" :key="item.id" class="py-3 flex items-start justify-between gap-3">
+        <li
+          v-for="item in formattedMeasurements"
+          :key="item.id"
+          class="py-3 flex items-start justify-between gap-3"
+        >
           <div>
             <p class="font-medium">
               {{ item.weightKg }} kg · {{ new Date(item.recordedAt).toLocaleDateString() }}
             </p>
             <p class="text-sm text-muted">
-              {{measurementSpecs.filter(s => s.key !== 'weightKg').map(s => `${s.label}: ${item[s.key as
-                MeasurementFieldKey] ?? '—'} ${s.unit}`).join(' · ')}}
+              {{ measurementSpecs.filter(s => s.key !== 'weightKg').map(s => `${s.label}: ${item[s.key as
+                MeasurementFieldKey] ?? '—'} ${s.unit}`).join(' · ') }}
             </p>
-            <p v-if="item.notes" class="text-sm text-muted">
+            <p
+              v-if="item.notes"
+              class="text-sm text-muted"
+            >
               {{ item.notes }}
             </p>
           </div>
 
           <div class="flex flex-col gap-2">
-            <UButton color="error" variant="soft" size="xs" icon="i-lucide-trash" @click="removeMeasurement(item.id)">
+            <UButton
+              color="error"
+              variant="soft"
+              size="xs"
+              icon="i-lucide-trash"
+              @click="removeMeasurement(item.id)"
+            >
               Eliminar
             </UButton>
-            <UButton variant="soft" color="neutral" size="xs" icon="i-lucide-pencil" @click="openEdit(item)">
+            <UButton
+              variant="soft"
+              color="neutral"
+              size="xs"
+              icon="i-lucide-pencil"
+              @click="openEdit(item)"
+            >
               Editar
             </UButton>
           </div>
