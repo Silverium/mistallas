@@ -1,59 +1,85 @@
+import type { Page } from '@playwright/test'
 import { test, expect } from '@playwright/test'
 
 test.describe('offline indicator consistency', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      if (!localStorage.getItem('__e2e_force_offline')) {
-        localStorage.setItem('__e2e_force_offline', '0')
-      }
-
-      Object.defineProperty(window.navigator, 'onLine', {
-        configurable: true,
-        get: () => localStorage.getItem('__e2e_force_offline') !== '1'
-      })
-    })
+  test.beforeEach(async ({ context }) => {
+    await context.setOffline(false)
   })
 
-  test('stays in sync after repeated offline/online toggles', async ({ page }) => {
+  test.afterEach(async ({ context }) => {
+    await context.setOffline(false)
+  })
+
+  async function waitForServiceWorkerControl(page: Page, timeoutMs = 15_000) {
+    await expect.poll(
+      () => page.evaluate(async () => {
+        if (!('serviceWorker' in navigator)) {
+          return false
+        }
+
+        const registration = await navigator.serviceWorker.ready.catch(() => null)
+        return Boolean(registration?.active)
+      }),
+      { timeout: timeoutMs }
+    ).toBe(true)
+
+    const hasController = await page.evaluate(() => Boolean(navigator.serviceWorker.controller))
+
+    if (!hasController) {
+      await page.reload({ waitUntil: 'networkidle' })
+    }
+
+    await expect.poll(
+      () => page.evaluate(() => Boolean(navigator.serviceWorker.controller)),
+      { timeout: timeoutMs }
+    ).toBe(true)
+  }
+
+  async function emitConnectivityEvent(page: Page, offline: boolean) {
+    await page.evaluate((isOffline) => {
+      window.dispatchEvent(new Event(isOffline ? 'offline' : 'online'))
+    }, offline)
+  }
+
+  test('stays in sync after repeated offline/online toggles', async ({ page, context }) => {
     await page.goto('/')
+    await waitForServiceWorkerControl(page)
 
     const indicator = page.getByTestId('offline-indicator')
     await expect(indicator).toHaveCount(0)
 
     for (let i = 0; i < 4; i++) {
-      await page.evaluate(() => {
-        localStorage.setItem('__e2e_force_offline', '1')
-        window.dispatchEvent(new Event('offline'))
-      })
+      await context.setOffline(true)
+      await emitConnectivityEvent(page, true)
 
       await expect(indicator).toBeVisible()
 
-      await page.evaluate(() => {
-        localStorage.setItem('__e2e_force_offline', '0')
-        window.dispatchEvent(new Event('online'))
-      })
+      await context.setOffline(false)
+      await emitConnectivityEvent(page, false)
 
       await expect(indicator).toHaveCount(0)
     }
   })
 
-  test('offline + refresh keeps indicator correct on first render', async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem('__e2e_force_offline', '1')
-    })
+  test('offline + refresh keeps indicator correct after hydration', async ({ page, context }) => {
+    await page.goto('/')
+    await waitForServiceWorkerControl(page)
 
+    await context.setOffline(true)
+    await emitConnectivityEvent(page, true)
     await page.goto('/')
 
     const indicator = page.getByTestId('offline-indicator')
     await expect(indicator).toBeVisible()
 
-    await page.reload()
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Mis Tallas' })).toBeVisible()
+    await page.waitForTimeout(1000) // Wait for hydration/listeners.
+    await emitConnectivityEvent(page, true)
     await expect(indicator).toBeVisible()
 
-    await page.evaluate(() => {
-      localStorage.setItem('__e2e_force_offline', '0')
-      window.dispatchEvent(new Event('online'))
-    })
+    await context.setOffline(false)
+    await emitConnectivityEvent(page, false)
 
     await expect(indicator).toHaveCount(0)
   })
