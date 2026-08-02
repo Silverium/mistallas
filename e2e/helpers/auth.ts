@@ -33,7 +33,7 @@ export async function authenticateViaE2ELogin(
   }
 
   try {
-    const authResponse = await request.post('http://localhost:8787/api/test/e2e-login', {
+    const authResponse = await request.post('/api/test/e2e-login', {
       data: loginOptions
     })
 
@@ -58,7 +58,7 @@ export async function authenticateViaE2ELogin(
  */
 export async function authenticateTestUser(
   page: Page,
-  targetUrl: string = 'http://localhost:8787/purchases',
+  targetUrl: string = '/purchases',
   mockUser?: Partial<MockUser>
 ) {
   try {
@@ -69,7 +69,7 @@ export async function authenticateTestUser(
       console.log('  ℹ Not authenticated, attempting OAuth flow...')
 
       // Try Telegram auth (simplest OAuth flow)
-      await page.goto('http://localhost:8787/auth/telegram', { waitUntil: 'networkidle' })
+      await page.goto('/auth/telegram', { waitUntil: 'networkidle' })
       await page.waitForTimeout(2000)
 
       // If still not logged in, set mock session for testing

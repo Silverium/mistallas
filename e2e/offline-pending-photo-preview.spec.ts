@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { test, expect } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
-import { createImageFile } from './helpers/createImage'
+import { addPhotoToPurchaseRow } from './helpers/addPhotoToRow'
 import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
 
 async function waitForServiceWorkerControl(page: Page, timeoutMs = 15_000) {
@@ -82,10 +82,7 @@ test.describe('E2E: offline pending photo preview renders correctly', () => {
     await expect(row.getByTestId('purchase-pending-indicator')).toBeVisible()
 
     // Add one photo to the pending purchase while offline
-    const fileChooserPromise = page.waitForEvent('filechooser')
-    await row.getByLabel('Añadir foto').first().click()
-    const fileChooser = await fileChooserPromise
-    await fileChooser.setFiles(createImageFile())
+    await addPhotoToPurchaseRow(row, page)
 
     // Confirm the "Por subir" indicator and pending photo thumbnail appear
     await expect(row.getByText('Por subir')).toBeVisible()

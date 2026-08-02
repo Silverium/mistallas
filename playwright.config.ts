@@ -1,4 +1,12 @@
+/// <reference types="node" />
 import { defineConfig, devices } from '@playwright/test'
+
+// Load .env so BASE_URL is available when the VS Code Playwright plugin
+// evaluates this config (the plugin does not load .env automatically).
+try {
+  process.loadEnvFile()
+}
+catch { /* .env absent or already loaded */ }
 
 export default defineConfig({
   testDir: './e2e',
@@ -11,20 +19,26 @@ export default defineConfig({
   workers: '50%',
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:8787',
+    baseURL: process.env.BASE_URL ?? 'http://localhost:8787',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure'
   },
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] }
+      name: 'preview',
+      use: { ...devices['Desktop Chrome'], baseURL: process.env.BASE_URL ?? 'http://localhost:8787' }
+    },
+    {
+      name: 'dev',
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3000' }
     }
   ],
-  webServer: {
-    command: 'npm run preview',
-    url: 'http://localhost:8787',
-    reuseExistingServer: true,
-    timeout: 120_000
-  }
+  webServer: process.env.BASE_URL
+    ? undefined
+    : {
+        command: 'npm run preview',
+        url: 'http://localhost:8787',
+        reuseExistingServer: true,
+        timeout: 120_000
+      }
 })

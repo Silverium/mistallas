@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
-import { createImageFile } from './helpers/createImage'
+import { addPhotoToPurchaseRow } from './helpers/addPhotoToRow'
 import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
 
 async function createPurchase(page: Page, purchase: {
@@ -30,13 +30,6 @@ async function openRowByBrand(page: Page, brand: string) {
   const row = page.locator('li', { hasText: brand }).first()
   await expect(row).toBeVisible()
   return row
-}
-
-async function addPhotoToPurchaseRow(row: ReturnType<Page['locator']>, page: Page) {
-  const fileChooserPromise = page.waitForEvent('filechooser')
-  await row.getByLabel('Añadir foto').first().click()
-  const fileChooser = await fileChooserPromise
-  await fileChooser.setFiles(createImageFile())
 }
 
 async function expectButtonIconToBeRendered(button: ReturnType<Page['locator']>) {
