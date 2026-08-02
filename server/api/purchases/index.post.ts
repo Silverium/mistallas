@@ -17,9 +17,13 @@ export default eventHandler(async (event) => {
   })
   const { user } = await requireUserSession(event)
 
-  // Check purchase limit based on user tier
+  // Fetch current user tier from database (not from session which may be stale after upgrade)
+  const currentUser = await useDB().select().from(tables.users).where(eq(tables.users.id, user.id)).get()
+  const currentTier = currentUser?.tier || 'free'
+
+  // Check purchase limit based on current user tier
   const purchaseCount = await getUserPurchaseCount(user.id)
-  if (isAtLimit(user.tier || 'free', purchaseCount)) {
+  if (isAtLimit(currentTier, purchaseCount)) {
     throw createError({
       statusCode: 403,
       message: 'Purchase limit reached for your tier. Please upgrade to continue.',

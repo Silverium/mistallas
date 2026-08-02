@@ -1,8 +1,15 @@
 import { defineQueryOptions } from '@pinia/colada'
 
-type PurchasePhoto = {
-  id: number
-  slot: number
+/**
+ * Photo uploaded to the server and associated with a purchase.
+ *
+ * IMPORTANT: The `id` field is the server-assigned photoId (NOT a local tracking ID).
+ * This is assigned by the server after successful upload.
+ * Do not confuse with PendingPhoto.id, which is a local UUID.
+ */
+export type PurchasePhoto = {
+  id: number // ← SERVER-ASSIGNED photoId after upload
+  slot: number // photo position: 1-3
   mimeType: string
   width: number | null
   height: number | null
@@ -27,7 +34,7 @@ export const purchasesQuery = defineQueryOptions({
 
 export const purchasesPageQuery = (page: number = 1, limit: number = 20, search: string = '') => defineQueryOptions({
   key: ['purchases', page, limit, search],
-  query: () => {
+  query: async () => {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(limit)
@@ -35,7 +42,15 @@ export const purchasesPageQuery = (page: number = 1, limit: number = 20, search:
     if (search.trim()) {
       params.append('search', search.trim())
     }
-    return useRequestFetch()(`/api/purchases?${params.toString()}`) as Promise<PurchasesPaginatedResponse>
+    try {
+      return await useRequestFetch()(`/api/purchases?${params.toString()}`) as PurchasesPaginatedResponse
+    }
+    catch (err) {
+      const offlineStore = useOfflineDataStore()
+      const cached = offlineStore.getPurchasePage(page, limit, search)
+      if (cached) return cached
+      throw err
+    }
   }
 })
 
