@@ -21,7 +21,6 @@ type SyncRequestOptions = {
 
 const FLUSH_RETRY_MS = 3000
 const ONLINE_WATCHDOG_MS = 2500
-const ONLINE_STATE_POLL_MS = 1000
 
 export function shouldAnnounceReconnection({
   online,
@@ -327,7 +326,6 @@ export function useNetworkStatus() {
   const isFlushing = ref(false)
   const flushRetryTimer = ref<number | null>(null)
   const onlineWatchdogTimer = ref<number | null>(null)
-  const connectivityPollTimer = ref<number | null>(null)
   const queuedWorkCount = computed(() => offlineQueue.queue.length + pendingPhotos.pendingPhotos.length)
 
   // Hydration guard: SSR initializes this state as `true` (no navigator on server).
@@ -418,12 +416,66 @@ export function useNetworkStatus() {
     globalOnlineState.value = online
   }
 
+  const notifyServiceWorkerNetworkHint = (online: boolean) => {
+    if (!import.meta.client || !('serviceWorker' in navigator)) {
+      return
+    }
+
+    const controller = navigator.serviceWorker.controller
+    if (!controller) {
+      return
+    }
+
+    controller.postMessage({
+      type: 'CLIENT_NETWORK_HINT',
+      online
+    })
+  }
+
   const handleBrowserOnline = () => {
+    notifyServiceWorkerNetworkHint(true)
     applyBrowserOnlineState(true)
   }
 
   const handleBrowserOffline = () => {
+    notifyServiceWorkerNetworkHint(false)
     applyBrowserOnlineState(false)
+  }
+
+  const handleServiceWorkerMessage = (event: MessageEvent) => {
+    const payload = event.data as { type?: string, online?: boolean } | undefined
+    if (!payload || typeof payload.type !== 'string') {
+      return
+    }
+
+    if (payload.type === 'NETWORK_OFFLINE') {
+      applyBrowserOnlineState(false)
+      return
+    }
+
+    if (payload.type === 'NETWORK_ONLINE') {
+      applyBrowserOnlineState(true)
+      return
+    }
+
+    if (payload.type === 'NETWORK_STATUS' && typeof payload.online === 'boolean') {
+      applyBrowserOnlineState(payload.online)
+    }
+  }
+
+  const requestServiceWorkerNetworkStatus = () => {
+    if (!import.meta.client || !('serviceWorker' in navigator)) {
+      return
+    }
+
+    const controller = navigator.serviceWorker.controller
+    if (!controller) {
+      return
+    }
+
+    const channel = new MessageChannel()
+    channel.port1.onmessage = handleServiceWorkerMessage
+    controller.postMessage({ type: 'GET_NETWORK_STATUS' }, [channel.port2])
   }
 
   watch(globalOnlineState, async (online, wasOnline) => {
@@ -478,13 +530,14 @@ export function useNetworkStatus() {
   onMounted(async () => {
     if (import.meta.client) {
       applyBrowserOnlineState(navigator.onLine)
+      notifyServiceWorkerNetworkHint(navigator.onLine)
       window.addEventListener('online', handleBrowserOnline)
       window.addEventListener('offline', handleBrowserOffline)
 
-      connectivityPollTimer.value = window.setInterval(() => {
-        const nextOnline = navigator.onLine
-        applyBrowserOnlineState(nextOnline)
-      }, ONLINE_STATE_POLL_MS)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage)
+        requestServiceWorkerNetworkStatus()
+      }
     }
 
     if (shouldFlushWhenWorkAppears({
@@ -506,9 +559,8 @@ export function useNetworkStatus() {
     window.removeEventListener('online', handleBrowserOnline)
     window.removeEventListener('offline', handleBrowserOffline)
 
-    if (connectivityPollTimer.value != null) {
-      window.clearInterval(connectivityPollTimer.value)
-      connectivityPollTimer.value = null
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
     }
   })
 

@@ -11,9 +11,51 @@ declare let self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | { url: string, revision: string | null }>
 }
 
-self.addEventListener('message', (event) => {
+let lastKnownNetworkOnline: boolean | null = null
+
+async function broadcastNetworkStatus(type: 'NETWORK_OFFLINE' | 'NETWORK_ONLINE') {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  for (const client of clients) {
+    client.postMessage({ type })
+  }
+}
+
+async function detectNetworkOnlineState() {
+  try {
+    const response = await fetch(`/__sw-network-probe__/${Date.now()}`, {
+      method: 'HEAD',
+      cache: 'no-store'
+    })
+
+    // Any HTTP response means the network/origin is reachable.
+    return Boolean(response)
+  }
+  catch {
+    return false
+  }
+}
+
+self.addEventListener('message', async (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
+  }
+
+  if (event.data && event.data.type === 'CLIENT_NETWORK_HINT' && typeof event.data.online === 'boolean') {
+    lastKnownNetworkOnline = event.data.online
+    void broadcastNetworkStatus(event.data.online ? 'NETWORK_ONLINE' : 'NETWORK_OFFLINE')
+  }
+
+  if (event.data && event.data.type === 'GET_NETWORK_STATUS') {
+    const detectedOnline = await detectNetworkOnlineState()
+    if (lastKnownNetworkOnline !== detectedOnline) {
+      lastKnownNetworkOnline = detectedOnline
+      void broadcastNetworkStatus(detectedOnline ? 'NETWORK_ONLINE' : 'NETWORK_OFFLINE')
+    }
+
+    event.ports?.[0]?.postMessage({
+      type: 'NETWORK_STATUS',
+      online: lastKnownNetworkOnline
+    })
   }
 })
 
@@ -49,11 +91,32 @@ registerRoute(
       new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 3600 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
       {
+        fetchDidSucceed: async ({ response }) => {
+          if (response) {
+            if (lastKnownNetworkOnline !== true) {
+              lastKnownNetworkOnline = true
+              await broadcastNetworkStatus('NETWORK_ONLINE')
+            }
+          }
+
+          return response
+        },
+        fetchDidFail: async () => {
+          if (lastKnownNetworkOnline !== false) {
+            lastKnownNetworkOnline = false
+            await broadcastNetworkStatus('NETWORK_OFFLINE')
+          }
+        },
         cacheKeyWillBeUsed: async ({ request }) => {
           const url = new URL(request.url)
           return url.origin + url.pathname
         },
         handlerDidError: async () => {
+          if (lastKnownNetworkOnline !== false) {
+            lastKnownNetworkOnline = false
+            await broadcastNetworkStatus('NETWORK_OFFLINE')
+          }
+
           return await caches.match('/')
             || await caches.match('/index.html')
             || Response.error()
