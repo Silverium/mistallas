@@ -27,26 +27,12 @@ for (const host of hostsToCheck) {
   const result = await canBind(host)
 
   if (!result.ok) {
-    // kill the process that is using the port
-    // lsof works on macOS and most Linux systems; fuser is a fallback for Linux systems without lsof
-    let pids = spawnSync('lsof', ['-tiTCP:' + port, '-sTCP:LISTEN'], { encoding: 'utf8' })
-      .stdout.trim()
-      .split('\n')
-      .filter(Boolean)
-
-    if (pids.length === 0) {
-      const fuserOut = spawnSync('fuser', [port + '/tcp'], { encoding: 'utf8' }).stdout
-      pids = fuserOut.trim().split(/\s+/).filter(Boolean)
-    }
-
-    for (const pid of pids) {
-      console.log(`Killing process ${pid} using port ${port}`)
-      spawnSync('kill', ['-9', pid])
-    }
-    if (pids.length === 0) {
-      console.error(`Port ${port} is already in use on ${host}. Stop the existing server and try again.`)
-      process.exit(1)
-    }
+    // Never force-kill processes here.
+    // Abrupt termination (kill -9) can leave child toolchain workers in an
+    // inconsistent state and cause flaky/esbuild deadlock failures.
+    console.error(`Port ${port} is already in use on ${host}.`)
+    console.error('Stop the existing server (or let Playwright reuse it) and try again.')
+    process.exit(1)
   }
 }
 // pnpm build first
