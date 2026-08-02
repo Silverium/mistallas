@@ -59,16 +59,6 @@ type ComparisonResult = {
   availableMeasurements?: Measurement[]
 }
 
-type PurchasePhoto = {
-  id: number
-  slot: number
-  mimeType: string
-  width: number | null
-  height: number | null
-  bytes: number | null
-  createdAt: string | Date | null
-}
-
 const toast = useToast()
 const queryCache = useQueryCache()
 const requestFetch = useRequestFetch()
@@ -1029,29 +1019,6 @@ const { mutate: linkMeasurementToPurchase, isLoading: linkingMeasurement } = use
   }
 })
 
-const { data: photoList, refresh: refreshPhotos, isLoading: photosLoading } = useQuery({
-  key: ['purchase-photos'],
-  query: async () => {
-    if (!selectedPhotoPurchaseId.value) {
-      return [] as PurchasePhoto[]
-    }
-
-    if (isClientOffline.value) {
-      return [] as PurchasePhoto[]
-    }
-
-    try {
-      return await requestFetch<PurchasePhoto[]>(`/api/purchases/${selectedPhotoPurchaseId.value}/photos`)
-    }
-    catch {
-      // In offline/unstable transitions after refresh, this GET can fail while
-      // the UI remains usable via queued pending photos.
-      return [] as PurchasePhoto[]
-    }
-  },
-  enabled: () => !!selectedPhotoPurchaseId.value
-})
-
 const triggerPhotoPicker = () => {
   photoInput.value?.click()
 }
@@ -1159,7 +1126,6 @@ const uploadPhotoForPurchase = async (purchaseId: number | string, photo: Prepar
 
   await queryCache.invalidateQueries({ key: ['purchases'] })
   toast.add({ title: 'Foto subida' })
-  await refreshPhotos()
 }
 
 const onPhotoInputChange = async (event: Event) => {
@@ -1215,7 +1181,7 @@ const onPhotoInputChange = async (event: Event) => {
 
     // Check if we can add more pending photos
     const pendingCount = pendingPhotos.getPhotosByPurchaseId(purchaseId).length
-    const uploadedCount = filteredPhotoList.value.length
+    const uploadedCount = editingPurchasePhotoSlots.value.length
     if (uploadedCount + pendingCount >= 3) {
       toast.add({ title: 'Máximo de 3 fotos permitidas.', color: 'error' })
       return
@@ -1292,7 +1258,6 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
     }
 
     toast.add({ title: 'Foto eliminada' })
-    await refreshPhotos()
   }
   catch (err) {
     if (isOfflineQueuedError(err)) {
@@ -1597,7 +1562,23 @@ const deleteCurrentEditingPurchase = () => {
   openDeletePurchaseDialog(purchase)
 }
 
-const filteredPhotoList = computed(() => (photoList.value ?? []) as PurchasePhoto[])
+const editingPurchaseRecord = computed<Purchase | null>(() => {
+  if (editingPurchaseId.value == null) {
+    return null
+  }
+
+  const livePurchase = purchaseList.value.find(item => Number(item.id) === editingPurchaseId.value)
+  return livePurchase ?? currentEditingPurchase.value
+})
+
+const editingPurchasePhotoSlots = computed(() => {
+  const slots = editingPurchaseRecord.value?.photoSlots ?? []
+
+  return slots
+    .map(slot => Number(slot))
+    .filter(slot => Number.isFinite(slot) && slot > 0)
+    .sort((a, b) => a - b)
+})
 
 const pendingPhotosPreviews = computed<PendingPhotoPreview[]>(() => {
   const purchaseId = editingPurchaseId.value
@@ -2081,12 +2062,12 @@ const diffRows = computed<RowDiff[]>(() => {
 
             <div class="sm:col-span-2">
               <h4 class="font-medium mb-3">
-                Fotos ({{ (photoList?.length ?? 0) + pendingPhotosPreviews.length }}/3)
+                Fotos ({{ editingPurchasePhotoSlots.length + pendingPhotosPreviews.length }}/3)
               </h4>
               <div class="space-y-2">
                 <div class="flex flex-wrap items-center gap-2">
                   <UButton
-                    v-if="(photoList?.length ?? 0) + pendingPhotosPreviews.length < 3"
+                    v-if="editingPurchasePhotoSlots.length + pendingPhotosPreviews.length < 3"
                     type="button"
                     icon="i-lucide-upload"
                     color="primary"
@@ -2095,38 +2076,31 @@ const diffRows = computed<RowDiff[]>(() => {
                   >
                     Subir foto
                   </UButton>
-
-                  <UBadge
-                    v-if="photosLoading"
-                    color="neutral"
-                    variant="subtle"
-                  >
-                    Cargando...
-                  </UBadge>
                 </div>
 
                 <div
-                  v-if="filteredPhotoList.length || pendingPhotosPreviews.length"
+                  v-if="editingPurchasePhotoSlots.length || pendingPhotosPreviews.length"
                   class="grid grid-cols-3 gap-2"
                 >
                   <!-- Uploaded photos -->
                   <div
-                    v-for="item in filteredPhotoList"
-                    :key="`uploaded-${item.id}`"
+                    v-for="slot in editingPurchasePhotoSlots"
+                    :key="`uploaded-${slot}`"
                     class="relative aspect-square overflow-hidden rounded-md group"
                   >
                     <img
-                      :src="`/api/purchases/${editingPurchaseId}/photos/${item.slot}`"
-                      :alt="`Foto ${item.slot}`"
+                      :src="buildPhotoUrl(editingPurchaseId!, slot)"
+                      :alt="`Foto ${slot}`"
                       class="size-full rounded-md object-cover"
                     >
                     <UButton
-                      class="absolute right-1 top-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                      class="absolute right-1 top-1 opacity-100"
+                      data-testid="delete-photo-button"
                       color="error"
                       variant="solid"
                       icon="i-lucide-x"
                       size="xs"
-                      @click="openDeletePhotoDialog(editingPurchaseId!, item.slot)"
+                      @click="openDeletePhotoDialog(editingPurchaseId!, slot)"
                     />
                   </div>
 

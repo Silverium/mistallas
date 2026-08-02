@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
 import { addPhotoToPurchaseRow } from './helpers/addPhotoToRow'
@@ -68,7 +67,7 @@ test.describe('E2E: edit purchase — delete photos one by one', () => {
       ).toBe(remaining)
 
       // Click the delete (×) button on the first uploaded photo in the dialog
-      const firstDeleteBtn = editDialog.locator('.group .absolute button[class*="error"]').first()
+      const firstDeleteBtn = editDialog.getByTestId('delete-photo-button').first()
       await firstDeleteBtn.click({ force: true })
 
       // Confirm the photo deletion modal
