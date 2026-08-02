@@ -44,15 +44,15 @@ test.describe('E2E: edit purchase — delete photos one by one', () => {
 
       // Wait for the newly uploaded photo to appear before adding the next one
       await expect.poll(
-        () => row.locator('img[alt^="Foto "][alt*=" de "]').count(),
+        () => row.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').count(),
         { timeout: 5_000 }
       ).toBe(i + 1)
 
-      const latestPhoto = row.locator('img[alt^="Foto "][alt*=" de "]').nth(i)
+      const latestPhoto = row.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').nth(i)
       await expectImageToBeLoaded(latestPhoto)
     }
 
-    await expect(row.locator('img[alt^="Foto "][alt*=" de "]')).toHaveCount(3)
+    await expect(row.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])')).toHaveCount(3)
 
     // 3. Open the edit dialog
     await row.getByRole('button', { name: 'Editar' }).click()
@@ -62,7 +62,7 @@ test.describe('E2E: edit purchase — delete photos one by one', () => {
     // Delete photos one by one, verifying each disappears from the edit dialog
     for (let remaining = 3; remaining >= 1; remaining--) {
       await expect.poll(
-        () => editDialog.locator('img[alt^="Foto "]').count(),
+        () => editDialog.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').count(),
         { timeout: 10_000 }
       ).toBe(remaining)
 
@@ -71,20 +71,22 @@ test.describe('E2E: edit purchase — delete photos one by one', () => {
       await firstDeleteBtn.click({ force: true })
 
       // Confirm the photo deletion modal
-      const confirmHeading = page.getByRole('heading', { name: 'Confirmar eliminación' })
-      await expect(confirmHeading).toBeVisible()
-      await page.getByRole('button', { name: 'Eliminar' }).last().click({ force: true })
-      await expect(confirmHeading).not.toBeVisible()
+      const confirmDeletePhotoDialog = page
+        .locator('[role="dialog"]')
+        .filter({ hasText: '¿Seguro que quieres eliminar esta foto?' })
+      await expect(confirmDeletePhotoDialog).toBeVisible()
+      await confirmDeletePhotoDialog.getByRole('button', { name: 'Eliminar' }).click({ force: true })
+      await expect(confirmDeletePhotoDialog).not.toBeVisible()
 
       // Verify the photo count dropped
       await expect.poll(
-        () => editDialog.locator('img[alt^="Foto "]').count(),
+        () => editDialog.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').count(),
         { timeout: 10_000 }
       ).toBe(remaining - 1)
     }
 
     // No uploaded photos remain in the edit dialog
-    await expect(editDialog.locator('img[alt^="Foto "]')).toHaveCount(0)
+    await expect(editDialog.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])')).toHaveCount(0)
 
     // Close the edit dialog
     await editDialog.getByRole('button', { name: /cerrar|cancelar/i }).last().click()
@@ -98,10 +100,12 @@ test.describe('E2E: edit purchase — delete photos one by one', () => {
     await expect(rowToDelete).toBeVisible()
     await rowToDelete.getByRole('button', { name: 'Eliminar' }).click({ force: true })
 
-    const confirmHeading = page.getByRole('heading', { name: 'Confirmar eliminación' })
-    await expect(confirmHeading).toBeVisible()
-    await page.getByRole('button', { name: 'Eliminar' }).last().click({ force: true })
-    await expect(confirmHeading).not.toBeVisible()
+    const confirmDeletePurchaseDialog = page
+      .locator('[role="dialog"]')
+      .filter({ hasText: '¿Seguro que quieres eliminar esta compra?' })
+    await expect(confirmDeletePurchaseDialog).toBeVisible()
+    await confirmDeletePurchaseDialog.getByRole('button', { name: 'Eliminar' }).click({ force: true })
+    await expect(confirmDeletePurchaseDialog).not.toBeVisible()
 
     await expect.poll(
       async () => page.locator('li', { hasText: brand }).count(),

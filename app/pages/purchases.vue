@@ -3,6 +3,7 @@ import { calculateMultiWordSearchScore } from '~/utils/fuzzy-search'
 import { getSpanishApiErrorMessage, isNuxtZodError } from '~/utils/errors'
 import { blobToBase64, compressImage } from '~/utils/image-compression'
 import { measurementSpecs } from '~/utils/measurementSpecs'
+import PurchasePhotoUploadGrid from '../components/purchases/PurchasePhotoUploadGrid.vue'
 import { buildOfflinePurchasesResult } from '~/utils/offline-purchases'
 import { getQueuedPendingPhotoPreviews } from '~/utils/offline-pending-photos'
 import { shouldEnableOfflineProtectedQuery } from '~/utils/offline-query-access'
@@ -1605,6 +1606,26 @@ const pendingPhotosPreviews = computed<PendingPhotoPreview[]>(() => {
   }))
 })
 
+const canAddPhotoInEditModal = computed(() => {
+  return editingPurchasePhotoSlots.value.length + pendingPhotosPreviews.value.length < 3
+})
+
+const buildEditingPhotoUrl = (slot: number) => {
+  if (editingPurchaseId.value == null) {
+    return ''
+  }
+
+  return buildPhotoUrl(editingPurchaseId.value, slot)
+}
+
+const handleEditModalUploadedPhotoDelete = (slot: number) => {
+  if (editingPurchaseId.value == null) {
+    return
+  }
+
+  openDeletePhotoDialog(editingPurchaseId.value, slot)
+}
+
 const removePendingPhoto = (index: number) => {
   const preview = pendingPhotosPreviews.value[index]
   if (!preview) {
@@ -1634,42 +1655,6 @@ const getPendingPhotosForPurchase = (purchaseId: number | string) => {
 }
 
 const fmt = (value: number, unit: string) => `${value.toFixed(1)} ${unit}`
-
-type PhotoGridItem = {
-  type: 'uploaded' | 'pending' | 'empty'
-  slot?: number
-  id?: string
-  previewUrl?: string
-}
-
-const getPhotoGridItems = (purchase: Purchase): PhotoGridItem[] => {
-  const items: PhotoGridItem[] = []
-  const mergedPhotoSlots = getMergedPhotoSlots(purchase)
-
-  // Add uploaded photos first
-  for (const slot of [1, 2, 3]) {
-    if (mergedPhotoSlots.includes(slot)) {
-      items.push({ type: 'uploaded', slot })
-    }
-  }
-
-  // Add pending photos
-  const pendingPhotos = getPendingPhotosForPurchase(purchase.id)
-  for (const photo of pendingPhotos) {
-    items.push({ type: 'pending', id: photo.id, previewUrl: photo.previewUrl })
-  }
-
-  // Fill remaining slots with empty placeholders
-  while (items.length < 3) {
-    items.push({ type: 'empty' })
-  }
-
-  return items
-}
-
-const canAddMorePhotos = (purchase: Purchase) => {
-  return getMergedPhotoSlots(purchase).length < 3
-}
 
 watch(syncedPhotoPurchases, (ids) => {
   if (!ids.length) {
@@ -1825,60 +1810,19 @@ const diffRows = computed<RowDiff[]>(() => {
             </p>
 
             <div
-              v-if="purchase.photoSlots?.length || canAddMorePhotos(purchase) || getPendingPhotosForPurchase(purchase.id).length > 0"
-              class="mt-2 grid grid-cols-3 gap-2"
+              v-if="purchase.photoSlots?.length || canAddPhoto(purchase) || getPendingPhotosForPurchase(purchase.id).length > 0"
+              class="mt-2"
             >
-              <!-- Unified photo grid: uploaded + pending + empty slots -->
-              <template
-                v-for="item in getPhotoGridItems(purchase)"
-                :key="`${item.type}-${item.slot || item.id}`"
-              >
-                <!-- Uploaded photo -->
-                <button
-                  v-if="item.type === 'uploaded'"
-                  type="button"
-                  class="w-full rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary aspect-square overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700"
-                  :aria-label="`Abrir foto ${item.slot} de ${purchase.brand}`"
-                  @click="openPreview(purchase, item.slot!)"
-                >
-                  <img
-                    :src="buildPhotoUrl(purchase.id, item.slot!)"
-                    :alt="`Foto ${item.slot} de ${purchase.brand}`"
-                    class="size-full object-cover"
-                  >
-                </button>
-
-                <!-- Pending photo -->
-                <div
-                  v-else-if="item.type === 'pending'"
-                  class="relative aspect-square overflow-hidden rounded-md border-2 border-dashed border-amber-400 dark:border-amber-600"
-                >
-                  <img
-                    :src="item.previewUrl"
-                    :alt="'Foto pendiente'"
-                    class="size-full rounded-md object-cover opacity-50"
-                    loading="lazy"
-                  >
-                  <div class="absolute inset-0 flex items-center justify-center bg-amber-500/30">
-                    <span class="text-xs font-semibold text-amber-900 dark:text-amber-100">Por subir</span>
-                  </div>
-                </div>
-
-                <!-- Empty slot placeholder -->
-                <button
-                  v-else
-                  type="button"
-                  class="w-full rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-8 sm:h-10 border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center align-center my-auto"
-                  :aria-label="`Añadir foto`"
-                  :disabled="!canAddPhoto(purchase)"
-                  @click="openEditAndAddPhoto(purchase)"
-                >
-                  <div class="flex items-center justify-center gap-2">
-                    <span class="text-2xl text-gray-400">+</span>
-                    <span class="text-xs text-gray-400">Foto</span>
-                  </div>
-                </button>
-              </template>
+              <PurchasePhotoUploadGrid
+                :uploaded-slots="getMergedPhotoSlots(purchase)"
+                :pending-previews="getPendingPhotosForPurchase(purchase.id)"
+                :build-photo-src="(slot: number) => buildPhotoUrl(purchase.id, slot)"
+                :fill-empty-slots="true"
+                :can-add-photo="canAddPhoto(purchase)"
+                :enable-uploaded-preview="true"
+                @preview-uploaded="(slot: number) => openPreview(purchase, slot)"
+                @add-empty-slot="openEditAndAddPhoto(purchase)"
+              />
             </div>
           </div>
 
@@ -2061,75 +2005,19 @@ const diffRows = computed<RowDiff[]>(() => {
             </div>
 
             <div class="sm:col-span-2">
-              <h4 class="font-medium mb-3">
-                Fotos ({{ editingPurchasePhotoSlots.length + pendingPhotosPreviews.length }}/3)
-              </h4>
-              <div class="space-y-2">
-                <div class="flex flex-wrap items-center gap-2">
-                  <UButton
-                    v-if="editingPurchasePhotoSlots.length + pendingPhotosPreviews.length < 3"
-                    type="button"
-                    icon="i-lucide-upload"
-                    color="primary"
-                    variant="soft"
-                    @click="triggerPhotoPicker"
-                  >
-                    Subir foto
-                  </UButton>
-                </div>
-
-                <div
-                  v-if="editingPurchasePhotoSlots.length || pendingPhotosPreviews.length"
-                  class="grid grid-cols-3 gap-2"
-                >
-                  <!-- Uploaded photos -->
-                  <div
-                    v-for="slot in editingPurchasePhotoSlots"
-                    :key="`uploaded-${slot}`"
-                    class="relative aspect-square overflow-hidden rounded-md group"
-                  >
-                    <img
-                      :src="buildPhotoUrl(editingPurchaseId!, slot)"
-                      :alt="`Foto ${slot}`"
-                      class="size-full rounded-md object-cover"
-                    >
-                    <UButton
-                      class="absolute right-1 top-1 opacity-100"
-                      data-testid="delete-photo-button"
-                      color="error"
-                      variant="solid"
-                      icon="i-lucide-x"
-                      size="xs"
-                      @click="openDeletePhotoDialog(editingPurchaseId!, slot)"
-                    />
-                  </div>
-
-                  <!-- Pending photo previews -->
-                  <div
-                    v-for="(pending, index) in pendingPhotosPreviews"
-                    :key="`pending-${index}`"
-                    class="relative aspect-square overflow-hidden rounded-md group border-2 border-dashed border-amber-400 dark:border-amber-600"
-                  >
-                    <img
-                      :src="pending.previewUrl"
-                      :alt="pending.file.name"
-                      class="size-full rounded-md object-cover opacity-50"
-                      loading="lazy"
-                    >
-                    <div class="absolute inset-0 flex items-center justify-center bg-amber-500/30">
-                      <span class="text-sm font-semibold text-amber-900 dark:text-amber-100">Por subir</span>
-                    </div>
-                    <UButton
-                      class="absolute right-1 top-1 opacity-100"
-                      color="error"
-                      variant="solid"
-                      icon="i-lucide-x"
-                      size="xs"
-                      @click="removePendingPhoto(index)"
-                    />
-                  </div>
-                </div>
-              </div>
+              <PurchasePhotoUploadGrid
+                :uploaded-slots="editingPurchasePhotoSlots"
+                :pending-previews="pendingPhotosPreviews"
+                :build-photo-src="buildEditingPhotoUrl"
+                :show-header="true"
+                :fill-empty-slots="true"
+                :can-add-photo="canAddPhotoInEditModal"
+                :show-delete-uploaded="true"
+                :show-delete-pending="true"
+                @add-empty-slot="triggerPhotoPicker"
+                @delete-uploaded="handleEditModalUploadedPhotoDelete"
+                @delete-pending="removePendingPhoto"
+              />
             </div>
 
             <div class="sm:col-span-2 flex flex-wrap gap-2">
