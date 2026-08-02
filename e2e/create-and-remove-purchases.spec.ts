@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import { test, expect } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
 import { createImage } from './helpers/createImage'
+import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
 
 async function createPurchase(page: Page, purchase: {
   brand: string
@@ -265,13 +266,7 @@ test.describe('E2E: create and remove purchases with pending photos sync', () =>
     const onlinePhotoImg = onlineRow.locator('img[alt^="Foto "][alt*=" de "]').first()
     const onlinePhotoAlt = await onlinePhotoImg.getAttribute('alt')
     const onlinePhotoSrc = await onlinePhotoImg.getAttribute('src')
-    await expect.poll(
-      async () => onlinePhotoImg.evaluate((img) => {
-        const i = img as HTMLImageElement
-        return i.complete && i.naturalWidth > 0 && i.naturalHeight > 0
-      }),
-      { timeout: 15000 }
-    ).toBe(true)
+    await expectImageToBeLoaded(onlinePhotoImg)
 
     // 2. User loads purchases
     await page.reload({ waitUntil: 'networkidle' })
@@ -316,13 +311,7 @@ test.describe('E2E: create and remove purchases with pending photos sync', () =>
     await expect(cachedPhoto).toBeVisible()
     await expect(cachedPhoto).toHaveAttribute('src', onlinePhotoSrc as string)
     await expect(cachedPhoto).toHaveAttribute('alt', onlinePhotoAlt as string)
-    await expect.poll(
-      async () => cachedPhoto.evaluate((img) => {
-        const i = img as HTMLImageElement
-        return i.complete && i.naturalWidth > 0 && i.naturalHeight > 0
-      }),
-      { timeout: 15000 }
-    ).toBe(true)
+    await expectImageToBeLoaded(cachedPhoto)
 
     // 4. User creates a PENDING purchase
     await createPurchase(page, pendingPurchase)
