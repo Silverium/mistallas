@@ -1,11 +1,7 @@
 import type { Page } from '@playwright/test'
 import { test, expect } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
-
-function tinyPngBuffer() {
-  const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmj8AAAAASUVORK5CYII='
-  return Buffer.from(base64, 'base64')
-}
+import { createImage } from './helpers/createImage'
 
 async function createPurchase(page: Page, purchase: {
   brand: string
@@ -42,7 +38,7 @@ async function addPhotoToPurchaseRow(row: ReturnType<Page['locator']>, page: Pag
   await fileChooser.setFiles({
     name: `photo-${Date.now()}.png`,
     mimeType: 'image/png',
-    buffer: tinyPngBuffer()
+    buffer: createImage()
   })
 }
 

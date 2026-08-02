@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { authenticateViaE2ELogin } from './helpers/auth'
 import type { APIRequestContext } from '@playwright/test'
+import { createImage } from './helpers/createImage'
 
 /**
  * Real integration test for offline photo display
@@ -9,12 +10,6 @@ import type { APIRequestContext } from '@playwright/test'
  * This test does NOT mock APIs - it uses the real backend
  */
 
-// Helper: Create a simple test image buffer
-function createTestImageBuffer(): Buffer {
-  const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmj8AAAAASUVORK5CYII='
-  return Buffer.from(base64, 'base64')
-}
-
 interface SeededPurchase {
   id: number
   brand: string
@@ -22,7 +17,7 @@ interface SeededPurchase {
 
 async function seedPurchasesWithPhoto(request: APIRequestContext): Promise<SeededPurchase[]> {
   const timestamp = Date.now()
-  const imageBuffer = createTestImageBuffer()
+  const imageBuffer = createImage()
   const seeded: SeededPurchase[] = []
 
   for (let i = 1; i <= 3; i++) {
