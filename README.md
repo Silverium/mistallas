@@ -1,9 +1,3 @@
-# Manage your Todos with Atidone ☑️
-
-A demonstration using [Nuxt](https://nuxt.com) with server-side rendering on the edge, authentication and database querying using [Cloudflare D1](https://developers.cloudflare.com/d1/) with [Drizzle ORM](https://orm.drizzle.team/).
-
-[![Deploy to NuxtHub](https://hub.nuxt.com/button.svg)](https://admin.hub.nuxt.com/new?template=todos)
-
 ## Features
 
 - [Server-Side Rendering on the Edge](https://nuxt.com/blog/nuxt-on-the-edge)
@@ -16,11 +10,7 @@ A demonstration using [Nuxt](https://nuxt.com) with server-side rendering on the
 
 ## Live demo
 
-https://todos.nuxt.dev
-
-https://github.com/atinux/atidone/assets/904724/5f3bee55-dbae-4329-8057-7d0e16e92f81
-
-To see an example using Passkeys (WebAuthn) for authentication, checkout [todo-passkeys](https://github.com/atinux/todo-passkeys).
+https://mistallas.mistallas.workers.dev/
 
 ## Setup
 
@@ -82,19 +72,6 @@ Start the development server on http://localhost:3000
 npm run dev
 ```
 
-In the Nuxt DevTools, you can see your tables by clicking on the Hub Database tab:
-
-https://github.com/atinux/atidone/assets/904724/7ece3f10-aa6f-43d8-a941-7ca549bc208b
-
-## Deploy
-
-You can deploy this project on your Cloudflare account for free and with zero configuration using [NuxtHub](https://hub.nuxt.com).
-
-```bash
-npx nuxthub deploy
-```
-
-It's also possible to leverage Cloudflare Pages CI for deploying, learn more about the different options on https://hub.nuxt.com/docs/getting-started/deploy
 
 ## Remote Storage
 
