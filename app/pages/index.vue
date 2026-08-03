@@ -90,6 +90,8 @@ const handleSync = async () => {
       </UButton>
     </form>
 
+    <InstallAppButton />
+
     <div
       v-if="loggedIn"
       class="flex flex-col gap-2"
@@ -251,6 +253,7 @@ const handleSync = async () => {
     </p>
 
     <USeparator />
+
     <p
       v-if="!loggedIn"
       class="text-sm text-muted italic"
