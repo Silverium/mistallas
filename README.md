@@ -106,6 +106,10 @@ pnpm dev --remote
 
 Learn more about remote storage on https://hub.nuxt.com/docs/getting-started/remote-storage
 
-## License
+## ⚠️ License Notice
 
-[MIT License](./LICENSE)
+This repository is **NOT open-source software**. 
+
+While the source code is publicly viewable for transparency and evaluation, all rights are reserved by the author. You **cannot** take this code, deploy it to the internet, or use it to run a competing application or service. 
+
+Please read the full [LICENSE](LICENSE) file for deployment and monetization restrictions.
