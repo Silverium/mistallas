@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { test, expect } from '@playwright/test'
 
-test.describe('offline indicator consistency', () => {
+test.describe('offline indicator consistency', { tag: '@offline' }, () => {
   test.beforeEach(async ({ context }) => {
     await context.setOffline(false)
   })

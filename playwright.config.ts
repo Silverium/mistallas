@@ -30,7 +30,8 @@ export default defineConfig({
     },
     {
       name: 'dev',
-      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3000' }
+      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:3000' },
+      testMatch: /\/dev\/.*\.spec\.ts$/
     }
   ],
   webServer: process.env.BASE_URL

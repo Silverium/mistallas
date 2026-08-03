@@ -1,8 +1,8 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { authenticateViaE2ELogin } from './helpers/auth'
-import { addPhotoToPurchaseRow } from './helpers/addPhotoToRow'
-import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
+import { authenticateViaE2ELogin } from '../helpers/auth'
+import { addPhotoToPurchaseRow } from '../helpers/addPhotoToRow'
+import { expectImageToBeLoaded } from '../helpers/expectImageToBeLoaded'
 
 async function createPurchase(page: Page, purchase: {
   brand: string
@@ -212,7 +212,7 @@ async function assertBrandsAbsentFromLocalOfflineData(page: Page, brands: string
   expect(absentInLocalStorage).toBe(true)
 }
 
-test.describe('E2E: create and remove purchases with pending photos sync', () => {
+test.describe('E2E: create and remove purchases with pending photos sync', { tag: '@offline' }, () => {
   test.beforeEach(async ({ context }) => {
     await context.setOffline(false)
   })
@@ -226,7 +226,7 @@ test.describe('E2E: create and remove purchases with pending photos sync', () =>
       login: `test-create-remove-${Date.now()}`
     })
 
-    await page.goto('http://localhost:8787/purchases', { waitUntil: 'networkidle' })
+    await page.goto('/purchases', { waitUntil: 'networkidle' })
     await expect(page).toHaveURL(/\/purchases/)
     await waitForServiceWorkerControl(page)
 
@@ -386,7 +386,7 @@ test.describe('E2E: create and remove purchases with pending photos sync', () =>
 
     // Navigate to a clean purchases URL so the service worker caches a fresh
     // (empty) page before the offline reload — avoids stale SSR payload in cache
-    await page.goto('http://localhost:8787/purchases', { waitUntil: 'networkidle' })
+    await page.goto('/purchases', { waitUntil: 'networkidle' })
 
     // 11. go back offline and ensure deleted purchases are absent in local DB/cache too
     await context.setOffline(true)

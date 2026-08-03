@@ -1,8 +1,8 @@
 import type { Page } from '@playwright/test'
 import { test, expect } from '@playwright/test'
-import { authenticateViaE2ELogin } from './helpers/auth'
-import { addPhotoToPurchaseRow } from './helpers/addPhotoToRow'
-import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
+import { authenticateViaE2ELogin } from '../helpers/auth'
+import { addPhotoToPurchaseRow } from '../helpers/addPhotoToRow'
+import { expectImageToBeLoaded } from '../helpers/expectImageToBeLoaded'
 
 async function waitForServiceWorkerControl(page: Page, timeoutMs = 15_000) {
   await expect.poll(
@@ -29,7 +29,7 @@ async function waitForServiceWorkerControl(page: Page, timeoutMs = 15_000) {
   ).toBe(true)
 }
 
-test.describe('E2E: offline pending photo preview renders correctly', () => {
+test.describe('E2E: offline pending photo preview renders correctly', { tag: '@offline' }, () => {
   test.beforeEach(async ({ context }) => {
     await context.setOffline(false)
   })

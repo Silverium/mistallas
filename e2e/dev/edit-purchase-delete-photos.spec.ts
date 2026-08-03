@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { authenticateViaE2ELogin } from './helpers/auth'
-import { addPhotoToPurchaseRow } from './helpers/addPhotoToRow'
-import { expectImageToBeLoaded } from './helpers/expectImageToBeLoaded'
+import { authenticateViaE2ELogin } from '../helpers/auth'
+import { addPhotoToPurchaseRow } from '../helpers/addPhotoToRow'
+import { expectImageToBeLoaded } from '../helpers/expectImageToBeLoaded'
 
-test.describe('E2E: edit purchase — delete photos one by one', () => {
+test.describe('E2E: edit purchase — delete photos one by one', { tag: '@online' }, () => {
   test.beforeEach(async ({ context }) => {
     await context.setOffline(false)
   })
