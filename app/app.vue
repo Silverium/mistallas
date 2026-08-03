@@ -154,28 +154,32 @@ const userAvatar = computed(() => {
               >Mis Tallas</UButton>
             </NuxtLink>
           </h3>
-          <UDropdownMenu
+          <div
             v-if="!loggedIn"
-            :items="[
-              [
-                // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
-                { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram' },
-                { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
-                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
-                // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true }
-              ]
-            ]"
+            class="login-glow-border"
           >
-            <UButton
-              variant="ghost"
-              color="neutral"
-              size="xs"
-              icon="i-lucide-log-in"
-              trailing-icon="i-lucide-chevron-down"
+            <UDropdownMenu
+              :items="[
+                [
+                  // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
+                  { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram' },
+                  { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
+                  { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
+                  // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true }
+                ]
+              ]"
             >
-              Iniciar sesión
-            </UButton>
-          </UDropdownMenu>
+              <UButton
+                variant="ghost"
+                color="neutral"
+                size="xs"
+                icon="i-lucide-log-in"
+                trailing-icon="i-lucide-chevron-down"
+              >
+                Iniciar sesión
+              </UButton>
+            </UDropdownMenu>
+          </div>
           <div
             v-else
             class="flex flex-wrap -mx-2 sm:mx-0"

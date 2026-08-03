@@ -1,6 +1,107 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-@theme static {
-  --font-sans: 'Public Sans', sans-serif;
+
+/* === Login button: spinning comet trace + hue-cycling neon glow === */
+@property --login-a {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@property --login-hue {
+  syntax: '<number>';
+  initial-value: 220;
+  inherits: true;
+}
+
+.login-glow-border {
+  position: relative;
+  display: inline-flex;
+  border-radius: 4px;
+  animation: login-hue-shift 7s linear infinite;
+  /* Neon glow ring — lighter in light mode, vivid in dark */
+  box-shadow:
+    0 0 0 1px oklch(0.72 0.22 var(--login-hue)),
+    0 0 8px color-mix(in oklch, oklch(0.72 0.22 var(--login-hue)) 45%, transparent),
+    0 0 20px color-mix(in oklch, oklch(0.72 0.22 var(--login-hue)) 20%, transparent);
+}
+
+html.dark .login-glow-border {
+  box-shadow:
+    0 0 0 1px oklch(0.85 0.28 var(--login-hue)),
+    0 0 10px color-mix(in oklch, oklch(0.85 0.28 var(--login-hue)) 65%, transparent),
+    0 0 28px color-mix(in oklch, oklch(0.85 0.28 var(--login-hue)) 38%, transparent),
+    0 0 55px color-mix(in oklch, oklch(0.85 0.28 var(--login-hue)) 18%, transparent);
+}
+
+/* Comet trace: sharp leading edge, fading tail — clipped to a 2px ring */
+.login-glow-border::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--login-a),
+    transparent 0% 78%,
+    oklch(0.92 0.30 calc(var(--login-hue) + 40)) 88%,
+    oklch(0.99 0.36 var(--login-hue)) 94%,
+    transparent 99%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: login-trace 2s linear infinite;
+}
+
+/* Blurred outer glow that follows the comet */
+.login-glow-border::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: -2px;
+  border-radius: 4px;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--login-a),
+    transparent 0% 78%,
+    oklch(0.90 0.27 calc(var(--login-hue) + 40)) 88%,
+    oklch(0.95 0.33 var(--login-hue)) 94%,
+    transparent 99%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  filter: blur(4px);
+  opacity: 0.6;
+  animation: login-trace 2s linear infinite;
+}
+
+@keyframes login-trace {
+  to { --login-a: 360deg; }
+}
+
+@keyframes login-hue-shift {
+  from { --login-hue: 220; }
+  to   { --login-hue: 580; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-glow-border,
+  .login-glow-border::before,
+  .login-glow-border::after {
+    animation: none;
+  }
 }
