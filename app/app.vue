@@ -24,6 +24,27 @@ const toggleDarkMode = () => {
   isDarkMode.value = !isDarkMode.value
 }
 
+const hardReset = async () => {
+  try {
+    await clear()
+  }
+  catch { console.warn('Failed to clear session') }
+  localStorage.clear()
+  sessionStorage.clear()
+  if ('caches' in window) {
+    const keys = await caches.keys()
+    await Promise.all(keys.map(key => caches.delete(key)))
+  }
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(registrations.map(r => r.unregister()))
+  }
+  window.location.reload()
+}
+const reloadPage = () => {
+  window.location.reload()
+}
+
 useHead({
   htmlAttrs: { lang: 'es' },
   link: [
@@ -65,7 +86,8 @@ const items = computed(() => {
         icon: 'i-lucide-log-out',
         onSelect: clear
       }
-    ]
+    ],
+    [{ label: 'Resetear app', icon: 'i-lucide-rotate-ccw', onSelect: hardReset, color: 'error', title: 'Borra todos los datos locales y recarga la app' }]
   ] satisfies DropdownMenuItem[][]
 })
 
@@ -124,12 +146,22 @@ const userAvatar = computed(() => {
           fill="currentColor"
           viewBox="0 0 24 24"
         >
-          <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z" />
+          <path
+            d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"
+          />
         </svg>
       </UButton>
     </Teleport>
     <UContainer class="flex min-h-dvh flex-col">
-      <div class="mb-2 text-right">
+      <div class="mb-2 flex justify-end gap-1">
+        <UButton
+          square
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-refresh-cw"
+          title="Recargar página"
+          @click="reloadPage"
+        />
         <UButton
           square
           variant="ghost"
@@ -154,21 +186,22 @@ const userAvatar = computed(() => {
               >Mis Tallas</UButton>
             </NuxtLink>
           </h3>
-          <div
+
+          <UDropdownMenu
             v-if="!loggedIn"
-            class="login-glow-border"
+            :items="[
+              [
+                // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
+                { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram' },
+                { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
+                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
+              // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true },
+
+              ],
+              [{ label: 'Resetear app', icon: 'i-lucide-rotate-ccw', onSelect: hardReset, color: 'error', title: 'Borra todos los datos locales y recarga la app' }]
+            ]"
           >
-            <UDropdownMenu
-              :items="[
-                [
-                  // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
-                  { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram' },
-                  { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
-                  { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
-                  // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true }
-                ]
-              ]"
-            >
+            <div class="login-glow-border">
               <UButton
                 variant="ghost"
                 color="neutral"
@@ -178,8 +211,8 @@ const userAvatar = computed(() => {
               >
                 Iniciar sesión
               </UButton>
-            </UDropdownMenu>
-          </div>
+            </div>
+          </UDropdownMenu>
           <div
             v-else
             class="flex flex-wrap -mx-2 sm:mx-0"
@@ -268,6 +301,7 @@ const userAvatar = computed(() => {
             variant="link"
             icon="i-simple-icons-x"
           />
+
         </ULink>
       </footer>
     </UContainer>
@@ -327,13 +361,11 @@ html.dark .login-glow-border {
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: conic-gradient(
-    from var(--login-a),
-    transparent 0% 78%,
-    oklch(0.92 0.30 calc(var(--login-hue) + 40)) 88%,
-    oklch(0.99 0.36 var(--login-hue)) 94%,
-    transparent 99%
-  );
+  background: conic-gradient(from var(--login-a),
+      transparent 0% 78%,
+      oklch(0.92 0.30 calc(var(--login-hue) + 40)) 88%,
+      oklch(0.99 0.36 var(--login-hue)) 94%,
+      transparent 99%);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -353,13 +385,11 @@ html.dark .login-glow-border {
   inset: -2px;
   border-radius: 4px;
   padding: 1px;
-  background: conic-gradient(
-    from var(--login-a),
-    transparent 0% 78%,
-    oklch(0.90 0.27 calc(var(--login-hue) + 40)) 88%,
-    oklch(0.95 0.33 var(--login-hue)) 94%,
-    transparent 99%
-  );
+  background: conic-gradient(from var(--login-a),
+      transparent 0% 78%,
+      oklch(0.90 0.27 calc(var(--login-hue) + 40)) 88%,
+      oklch(0.95 0.33 var(--login-hue)) 94%,
+      transparent 99%);
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -374,15 +404,23 @@ html.dark .login-glow-border {
 }
 
 @keyframes login-trace {
-  to { --login-a: 360deg; }
+  to {
+    --login-a: 360deg;
+  }
 }
 
 @keyframes login-hue-shift {
-  from { --login-hue: 220; }
-  to   { --login-hue: 580; }
+  from {
+    --login-hue: 220;
+  }
+
+  to {
+    --login-hue: 580;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .login-glow-border,
   .login-glow-border::before,
   .login-glow-border::after {
