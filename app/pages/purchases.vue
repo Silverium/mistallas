@@ -1059,16 +1059,60 @@ const closePreview = () => {
 
 const previewSlots = computed(() => selectedPreviewPurchase.value?.photoSlots ?? [])
 
-const previewImageSrc = computed(() => {
-  const purchase = selectedPreviewPurchase.value
-  const slot = selectedPreviewSlot.value
+const PREVIEW_CLOSE_DRAG_THRESHOLD = 0.22
 
-  if (!purchase || slot == null) {
-    return null
+type PreviewCarouselApi = {
+  scrollTo: (index: number, jump?: boolean) => void
+}
+
+type PreviewCarouselExposed = {
+  emblaApi?: {
+    value?: PreviewCarouselApi
+  }
+}
+
+const previewCarousel = ref<PreviewCarouselExposed | null>(null)
+const previewDragPercentage = ref(0)
+
+const selectedPreviewSlotIndex = computed(() => {
+  if (selectedPreviewSlot.value == null) {
+    return 0
   }
 
-  return buildPhotoUrl(purchase.id, slot)
+  const index = previewSlots.value.findIndex(slot => slot === selectedPreviewSlot.value)
+  return index >= 0 ? index : 0
 })
+
+const scrollPreviewCarouselToSelectedSlot = () => {
+  const emblaApi = previewCarousel.value?.emblaApi?.value
+  if (!emblaApi) {
+    return
+  }
+
+  emblaApi.scrollTo(selectedPreviewSlotIndex.value, true)
+}
+
+const handlePreviewCarouselSelect = (index: number) => {
+  const slot = previewSlots.value[index]
+  if (slot == null) {
+    return
+  }
+
+  selectedPreviewSlot.value = slot
+}
+
+const handlePreviewDrawerDrag = (percentageDragged: number) => {
+  previewDragPercentage.value = percentageDragged
+}
+
+const handlePreviewDrawerRelease = () => {
+  const hasDraggedEnoughToClose = Math.abs(previewDragPercentage.value) >= PREVIEW_CLOSE_DRAG_THRESHOLD
+  previewDragPercentage.value = 0
+
+  if (hasDraggedEnoughToClose) {
+    closePreview()
+  }
+}
 
 const isPreviewOpen = computed({
   get: () => Boolean(selectedPreviewPurchase.value && selectedPreviewSlot.value != null),
@@ -1077,6 +1121,27 @@ const isPreviewOpen = computed({
       closePreview()
     }
   }
+})
+
+watch(isPreviewOpen, (open) => {
+  if (open) {
+    nextTick(() => {
+      scrollPreviewCarouselToSelectedSlot()
+    })
+    return
+  }
+
+  previewDragPercentage.value = 0
+})
+
+watch(selectedPreviewSlot, (nextSlot, previousSlot) => {
+  if (nextSlot == null || nextSlot === previousSlot || !isPreviewOpen.value) {
+    return
+  }
+
+  nextTick(() => {
+    scrollPreviewCarouselToSelectedSlot()
+  })
 })
 
 type PreparedPhotoUpload = {
@@ -2290,13 +2355,16 @@ const diffRows = computed<RowDiff[]>(() => {
       </template>
     </UModal>
 
-    <UModal
+    <UDrawer
       v-model:open="isPreviewOpen"
-      fullscreen
+      direction="bottom"
+      :handle="false"
       :dismissible="true"
       :ui="{
-        content: 'h-screen w-screen max-w-none p-0 sm:p-0'
+        content: 'h-screen w-screen max-w-none rounded-none border-0 bg-black/95 p-0'
       }"
+      @drag="handlePreviewDrawerDrag"
+      @release="handlePreviewDrawerRelease"
     >
       <template #content>
         <div class="relative flex h-screen w-screen flex-col bg-black/95 text-white">
@@ -2312,12 +2380,30 @@ const diffRows = computed<RowDiff[]>(() => {
           </div>
 
           <div class="flex min-h-0 flex-1 items-center justify-center p-4 sm:p-8">
-            <img
-              v-if="previewImageSrc"
-              :src="previewImageSrc"
-              :alt="selectedPreviewPurchase ? `Vista ampliada de ${selectedPreviewPurchase.brand}` : 'Vista ampliada'"
-              class="max-h-full max-w-full object-contain"
+            <UCarousel
+              v-if="selectedPreviewPurchase && previewSlots.length"
+              ref="previewCarousel"
+              :items="previewSlots"
+              :start-index="selectedPreviewSlotIndex"
+              :drag-threshold="12"
+              class="h-full w-full"
+              :ui="{
+                root: 'h-full w-full',
+                viewport: 'h-full w-full',
+                container: 'h-full w-full',
+                item: 'h-full w-full flex items-center justify-center'
+              }"
+              @select="handlePreviewCarouselSelect"
             >
+              <template #default="{ item: slot }">
+                <img
+                  :src="buildPhotoUrl(selectedPreviewPurchase.id, Number(slot))"
+                  :alt="selectedPreviewPurchase ? `Vista ampliada de ${selectedPreviewPurchase.brand}` : 'Vista ampliada'"
+                  class="max-h-full max-w-full select-none object-contain"
+                  draggable="false"
+                >
+              </template>
+            </UCarousel>
           </div>
 
           <div
@@ -2343,7 +2429,7 @@ const diffRows = computed<RowDiff[]>(() => {
           </div>
         </div>
       </template>
-    </UModal>
+    </UDrawer>
 
     <UButton
       v-if="showScrollToTopButton"
