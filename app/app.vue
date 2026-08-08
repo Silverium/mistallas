@@ -95,6 +95,8 @@ const items = computed(() => {
 })
 
 const userDisplayName = computed(() => user.value?.login || user.value?.email || 'Usuario')
+const runtimeConfig = useRuntimeConfig()
+const appVersion = computed(() => runtimeConfig.public.appVersion || '0.0.0')
 
 const toast = useToast()
 const { isOnline: onlineStatus, pendingCount: count } = useNetworkStatus()
@@ -281,31 +283,35 @@ const userAvatar = computed(() => {
         <NuxtPage />
       </UCard>
 
-      <footer class="text-center mt-auto">
-        <NuxtLink
-          href="https://github.com/silverium/mistallas"
-          target="_blank"
-          class="text-sm text-neutral-500 hover:text-neutral-700"
-        >
-          <UButton
-            color="neutral"
-            variant="link"
-            icon="i-lucide-github"
-          />
-        </NuxtLink>
-        ·
-        <ULink
-          to="https://x.com/soldesilver"
-          target="_blank"
-          class="text-sm text-neutral-500 hover:text-neutral-700"
-        >
-          <UButton
-            color="neutral"
-            variant="link"
-            icon="i-simple-icons-x"
-          />
-
-        </ULink>
+      <footer class="text-center mt-auto flex justify-around items-center gap-2 flex-wrap">
+        <p class="text-xs text-neutral-500 mb-1">
+          Versión {{ appVersion }}
+        </p>
+        <p>
+          <NuxtLink
+            href="https://github.com/silverium/mistallas"
+            target="_blank"
+            class="text-sm text-neutral-500 hover:text-neutral-700"
+          >
+            <UButton
+              color="neutral"
+              variant="link"
+              icon="i-lucide-github"
+            />
+          </NuxtLink>
+          ·
+          <ULink
+            to="https://x.com/soldesilver"
+            target="_blank"
+            class="text-sm text-neutral-500 hover:text-neutral-700"
+          >
+            <UButton
+              color="neutral"
+              variant="link"
+              icon="i-simple-icons-x"
+            />
+          </ULink>
+        </p>
       </footer>
     </UContainer>
   </UApp>

@@ -1,3 +1,11 @@
+import { readFileSync } from 'node:fs'
+
+const packageJson = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
+) as { version?: string }
+
+const appVersion = process.env.NUXT_PUBLIC_APP_VERSION || packageJson.version || '0.0.0'
+
 export default defineNuxtConfig({
   modules: [
     '@nuxt/icon',
@@ -26,7 +34,8 @@ export default defineNuxtConfig({
         : Number(process.env.NUXT_TIER_LIMIT_ENTERPRISE ?? 10000)
     },
     public: {
-      stripePublishableKey: ''
+      stripePublishableKey: '',
+      appVersion
     }
   },
   sourcemap: process.env.NUXT_DEV_SERVER === 'true' ? { server: true, client: true } : false,
