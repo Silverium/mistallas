@@ -4,7 +4,8 @@ const packageJson = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
 ) as { version?: string }
 
-const appVersion = process.env.NUXT_PUBLIC_APP_VERSION || packageJson.version || '0.0.0'
+const baseVersion = packageJson.version || '0.0.0'
+const appVersion = process.env.NUXT_PUBLIC_APP_VERSION || baseVersion
 
 export default defineNuxtConfig({
   modules: [
