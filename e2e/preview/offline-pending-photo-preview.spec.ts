@@ -117,7 +117,7 @@ test.describe('E2E: offline pending photo preview renders correctly', { tag: '@o
 
       const pendingBadgeCount = await refreshedRow.getByTestId('purchase-pending-indicator').count()
       const pendingPhotoCount = await refreshedRow.getByText('Por subir').count()
-      const uploadedPhotoCount = await refreshedRow.locator('img[alt^="Foto "][alt*=" de "]').count()
+      const uploadedPhotoCount = await refreshedRow.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').count()
 
       return pendingBadgeCount === 0 && pendingPhotoCount === 0 && uploadedPhotoCount >= 1
     }, { timeout: 30_000 }).toBe(true)
@@ -127,7 +127,7 @@ test.describe('E2E: offline pending photo preview renders correctly', { tag: '@o
     await expect(syncedRow.getByTestId('purchase-pending-indicator')).toHaveCount(0)
     await expect(syncedRow.getByText('Por subir')).toHaveCount(0)
 
-    const uploadedPhoto = syncedRow.locator('img[alt^="Foto "][alt*=" de "]').first()
+    const uploadedPhoto = syncedRow.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').first()
     await expect(uploadedPhoto).toBeVisible()
     await expectImageToBeLoaded(uploadedPhoto)
 

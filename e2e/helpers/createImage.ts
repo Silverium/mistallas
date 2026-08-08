@@ -1,4 +1,7 @@
 import { Buffer } from 'buffer'
+import { readFileSync } from 'node:fs'
+
+const tShirtGirlBuffer = readFileSync(new URL('./tShirtGirl.jpeg', import.meta.url))
 
 /**
  * Creates a small smiley face png picture in memory.
@@ -14,4 +17,10 @@ export const createImageFile = () => {
     mimeType: 'image/png',
     buffer: createImage()
   }
+}
+
+export const createLargeImageFile = () => {
+  return new File([tShirtGirlBuffer], 'tShirtGirl.jpeg', {
+    type: 'image/jpeg'
+  })
 }
