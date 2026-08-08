@@ -389,17 +389,21 @@ const loading = ref(true)
 const userErrorMessage = ref('')
 
 async function handleAuthError(error: unknown): Promise<boolean> {
-  const status = (error as { status?: number; statusCode?: number })?.status
-    ?? (error as { status?: number; statusCode?: number })?.statusCode
+  const status = (error as { status?: number, statusCode?: number })?.status
+    ?? (error as { status?: number, statusCode?: number })?.statusCode
   if (status === 401 || status === 403) {
+    const { fetch, loggedIn } = useUserSession()
     try {
-      await useUserSession().fetch()
-      return true
+      await fetch()
     }
     catch {
+      // fetch itself failed — session is gone
+    }
+    if (!loggedIn.value) {
       await navigateTo('/')
       return false
     }
+    return true
   }
   return false
 }
