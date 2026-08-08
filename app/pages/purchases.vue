@@ -128,6 +128,8 @@ const needsOnlineRefetch = ref(false)
 const isHandlingOnlineRecovery = ref(false)
 const lastOnlineRecoveryAttemptAt = ref(0)
 const optimisticPhotoSlotsByPurchase = ref<Record<number | string, number[]>>({})
+const recoveredPhotoSlotsByPurchase = ref<Record<number, number[]>>({})
+const attemptedPhotoSlotRecoveryByPurchase = ref<Record<number, true>>({})
 const queuedPhotoCandidates = ref<number[]>([])
 const showScrollToTopButton = ref(false)
 
@@ -260,7 +262,34 @@ type PurchasesApiResponse = {
   }
 }
 
-const fetchOnlinePurchasesPage = async (page: number, search: string, recovery: number): Promise<PurchasesApiResponse> => {
+const hasAnyPhotoSlots = (purchases: unknown[] = []) => {
+  return purchases.some((purchase) => {
+    if (!purchase || typeof purchase !== 'object') {
+      return false
+    }
+
+    const slots = (purchase as { photoSlots?: unknown }).photoSlots
+    return Array.isArray(slots) && slots.length > 0
+  })
+}
+
+type FetchOnlinePurchasesPagePayload = {
+  page: number
+  search: string
+  recovery: number
+  forceFresh?: boolean
+}
+
+const fetchOnlinePurchasesPage = async (
+  payload: FetchOnlinePurchasesPagePayload
+): Promise<PurchasesApiResponse> => {
+  const {
+    page,
+    search,
+    recovery,
+    forceFresh = false
+  } = payload
+
   const params = new URLSearchParams({
     page: String(page),
     limit: String(purchasesFetchLimit)
@@ -274,10 +303,14 @@ const fetchOnlinePurchasesPage = async (page: number, search: string, recovery: 
     params.append('_recovery', String(recovery))
   }
 
+  if (forceFresh) {
+    params.append('_fresh', String(Date.now()))
+  }
+
   return await useRequestFetch()(`/api/purchases?${params.toString()}`) as PurchasesApiResponse
 }
 
-const fetchAllOnlinePurchases = async (search: string, recovery: number) => {
+const fetchAllOnlinePurchases = async (search: string, recovery: number, forceFresh = false) => {
   let page = 1
   let totalPages = 1
   let total = 0
@@ -285,7 +318,12 @@ const fetchAllOnlinePurchases = async (search: string, recovery: number) => {
   const pagesForCache: Array<{ page: number, response: PurchasesApiResponse }> = []
 
   do {
-    const response = await fetchOnlinePurchasesPage(page, search, recovery)
+    const response = await fetchOnlinePurchasesPage({
+      page,
+      search,
+      recovery,
+      forceFresh
+    })
     const purchases = response.purchases ?? []
 
     allPurchases.push(...purchases)
@@ -308,6 +346,26 @@ const fetchAllOnlinePurchases = async (search: string, recovery: number) => {
     },
     pagesForCache
   }
+}
+
+const fetchAllOnlinePurchasesWithPhotoSlotRecovery = async (search: string, recovery: number) => {
+  const initialResult = await fetchAllOnlinePurchases(search, recovery)
+
+  const shouldRetryForPhotoSlots = !search.trim()
+    && (initialResult.response.purchases?.length ?? 0) > 0
+    && !hasAnyPhotoSlots(initialResult.response.purchases)
+
+  if (!shouldRetryForPhotoSlots) {
+    return initialResult
+  }
+
+  const freshResult = await fetchAllOnlinePurchases(search, recovery, true)
+
+  if (hasAnyPhotoSlots(freshResult.response.purchases)) {
+    return freshResult
+  }
+
+  return initialResult
 }
 
 const persistUnfilteredPurchasePages = (pagesForCache: Array<{ page: number, response: PurchasesApiResponse }>) => {
@@ -373,7 +431,7 @@ const { data: purchasesResponse, refresh: refreshPurchases } = useQuery({
     }
 
     try {
-      const { response, pagesForCache } = await fetchAllOnlinePurchases(searchTerm, onlineRecoveryVersion.value)
+      const { response, pagesForCache } = await fetchAllOnlinePurchasesWithPhotoSlotRecovery(searchTerm, onlineRecoveryVersion.value)
 
       // Cache ALL purchases, regardless of search term
       // This ensures offline mode has complete data
@@ -1336,9 +1394,49 @@ const deletePhoto = async (purchaseId: number, slot: number) => {
 
 const purchaseList = computed(() => (purchasesResponse.value?.purchases ?? []) as Purchase[])
 
+const recoverPhotoSlotsForPurchase = async (purchase: Purchase) => {
+  const numericId = Number(purchase.id)
+
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    return
+  }
+
+  if (attemptedPhotoSlotRecoveryByPurchase.value[numericId]) {
+    return
+  }
+
+  attemptedPhotoSlotRecoveryByPurchase.value = {
+    ...attemptedPhotoSlotRecoveryByPurchase.value,
+    [numericId]: true
+  }
+
+  try {
+    const photos = await requestFetch(`/api/purchases/${numericId}/photos`) as Array<{ slot?: number | string }>
+    const slots = photos
+      .map(photo => Number(photo.slot))
+      .filter(slot => Number.isFinite(slot) && slot > 0)
+
+    if (!slots.length) {
+      return
+    }
+
+    recoveredPhotoSlotsByPurchase.value = {
+      ...recoveredPhotoSlotsByPurchase.value,
+      [numericId]: Array.from(new Set(slots)).sort((a, b) => a - b)
+    }
+  }
+  catch {
+    // Ignore recovery failures; this is a best-effort visual fallback.
+  }
+}
+
 const getMergedPhotoSlots = (purchase: Purchase) => {
+  const recovered = recoveredPhotoSlotsByPurchase.value[Number(purchase.id)] ?? []
+
   const persisted = Array.isArray(purchase.photoSlots)
-    ? purchase.photoSlots.map(slot => Number(slot)).filter(slot => Number.isFinite(slot) && slot > 0)
+    ? purchase.photoSlots
+        .map(slot => Number(slot))
+        .filter(slot => Number.isFinite(slot) && slot > 0)
     : []
 
   const pendingPreviewCount = getPendingPhotosForPurchase(purchase.id).length
@@ -1355,7 +1453,7 @@ const getMergedPhotoSlots = (purchase: Purchase) => {
     ? (optimisticPhotoSlotsByPurchase.value[purchase.id] ?? [])
     : []
 
-  return Array.from(new Set([...persisted, ...optimistic])).sort((a, b) => a - b)
+  return Array.from(new Set([...persisted, ...recovered, ...optimistic])).sort((a, b) => a - b)
 }
 
 const addOptimisticUploadedSlot = (purchaseId: number) => {
@@ -1737,6 +1835,17 @@ watch(syncedPhotoPurchases, (ids) => {
 })
 
 watch(purchaseList, () => {
+  if (!isClientOffline.value) {
+    for (const purchase of purchaseList.value) {
+      const persistedSlots = Array.isArray(purchase.photoSlots) ? purchase.photoSlots.length : 0
+      if (persistedSlots > 0) {
+        continue
+      }
+
+      void recoverPhotoSlotsForPurchase(purchase)
+    }
+  }
+
   pruneStaleOptimisticPhotoSlots()
   promoteQueuedPhotoCandidates()
 })
