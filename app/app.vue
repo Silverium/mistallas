@@ -3,7 +3,10 @@ import type { DropdownMenuItem } from '#ui/types'
 import { useOfflineRouteAccess } from '~/utils/offline-route-access'
 import { useEffectiveSession } from '~/composables/useEffectiveSession'
 
-const { loggedIn, user, clear } = useEffectiveSession()
+const { loggedIn, liveLoggedIn, isOffline, user, clear } = useEffectiveSession()
+
+// Show authenticated nav only when live session is valid, or when offline (using snapshot)
+const isAuthenticated = computed(() => liveLoggedIn.value || (isOffline.value && loggedIn.value))
 const colorMode = useColorMode()
 const offlineRouteAccess = useOfflineRouteAccess()
 
@@ -188,7 +191,7 @@ const userAvatar = computed(() => {
           </h3>
 
           <UDropdownMenu
-            v-if="!loggedIn"
+            v-if="!isAuthenticated"
             :items="[
               [
                 // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
@@ -214,7 +217,7 @@ const userAvatar = computed(() => {
             </div>
           </UDropdownMenu>
           <div
-            v-else
+            v-else-if="isAuthenticated"
             class="flex flex-wrap -mx-2 sm:mx-0"
           >
             <UButton

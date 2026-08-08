@@ -388,6 +388,22 @@ const userData = ref<AdminUserDetail | null>(null)
 const loading = ref(true)
 const userErrorMessage = ref('')
 
+async function handleAuthError(error: unknown): Promise<boolean> {
+  const status = (error as { status?: number; statusCode?: number })?.status
+    ?? (error as { status?: number; statusCode?: number })?.statusCode
+  if (status === 401 || status === 403) {
+    try {
+      await useUserSession().fetch()
+      return true
+    }
+    catch {
+      await navigateTo('/')
+      return false
+    }
+  }
+  return false
+}
+
 async function refreshUser() {
   loading.value = true
   userErrorMessage.value = ''
@@ -396,8 +412,20 @@ async function refreshUser() {
     userData.value = await $fetch<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(userId)}`)
   }
   catch (error) {
-    userData.value = null
-    userErrorMessage.value = error instanceof Error ? error.message : 'No se pudo cargar el usuario.'
+    const retried = await handleAuthError(error)
+    if (retried) {
+      try {
+        userData.value = await $fetch<AdminUserDetail>(`/api/admin/users/${encodeURIComponent(userId)}`)
+      }
+      catch (retryError) {
+        userData.value = null
+        userErrorMessage.value = retryError instanceof Error ? retryError.message : 'No se pudo cargar el usuario.'
+      }
+    }
+    else {
+      userData.value = null
+      userErrorMessage.value = error instanceof Error ? error.message : 'No se pudo cargar el usuario.'
+    }
   }
   finally {
     loading.value = false
@@ -586,6 +614,7 @@ async function confirmAndSaveChanges() {
     }, 3000)
   }
   catch (error) {
+    await handleAuthError(error)
     console.error('Error al guardar cambios:', error)
     saveMessage.value = 'Error al guardar cambios'
     saveMessageType.value = 'error'
@@ -662,6 +691,7 @@ async function generateBulkPurchases() {
     }, 5000)
   }
   catch (error) {
+    await handleAuthError(error)
     console.error('Error al generar compras:', error)
     bulkPurchasesMessage.value = error instanceof Error ? error.message : 'Error al generar compras de prueba'
     bulkPurchasesMessageType.value = 'error'
@@ -696,6 +726,7 @@ async function deleteBulkPurchases() {
     }, 5000)
   }
   catch (error) {
+    await handleAuthError(error)
     console.error('Error al eliminar compras:', error)
     bulkPurchasesMessage.value = error instanceof Error ? error.message : 'Error al eliminar compras de prueba'
     bulkPurchasesMessageType.value = 'error'
