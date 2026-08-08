@@ -62,11 +62,11 @@ export default defineNuxtConfig({
         clientFiles: [
           // CSS entry — must be first so Tailwind CSS 4 is compiled before
           // the browser requests it, eliminating the 30-second FOUC window
-          './app/assets/main.css',
-          './app/app.vue',
-          './app/pages/*.vue',
-          './app/composables/*.ts',
-          './app/queries/*.ts'
+          './assets/main.css',
+          './app.vue',
+          './pages/*.vue',
+          './composables/*.ts',
+          './queries/*.ts'
         ]
       }
     },
@@ -127,11 +127,11 @@ export default defineNuxtConfig({
       background_color: '#ffffff',
       display: 'standalone',
       icons: [
-        { src: '/favicon/pwa-64x64.png', sizes: '64x64', type: 'image/png' },
-        { src: '/favicon/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-        { src: '/favicon/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/favicon/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
+        { src: '/favicon/web-app-manifest-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/favicon/web-app-manifest-512x512.png', sizes: '512x512', type: 'image/png' },
         {
-          src: '/favicon/maskable-icon-512x512.png',
+          src: '/favicon/web-app-manifest-512x512.png',
           sizes: '512x512',
           type: 'image/png',
           purpose: 'maskable'
