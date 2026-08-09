@@ -3,6 +3,8 @@ import { useValidatedQuery, z } from 'h3-zod'
 import { calculateMultiWordSearchScore } from '@root/server/utils/fuzzy-search'
 import { tables, useDB } from '@root/server/utils/db'
 
+const PHOTO_ENRICHMENT_MAX_IDS_PER_QUERY = 90
+
 export default eventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
@@ -126,25 +128,39 @@ export default eventHandler(async (event) => {
       }
     }
 
-    let photos: Array<{ purchaseEventId: number | string, slot: number | string }> = []
+    const photos: Array<{ purchaseEventId: number | string, slot: number | string }> = []
 
-    try {
-      photos = await db
-        .select({
-          purchaseEventId: tables.purchasePhotos.purchaseEventId,
-          slot: tables.purchasePhotos.slot
+    for (let index = 0; index < purchaseIds.length; index += PHOTO_ENRICHMENT_MAX_IDS_PER_QUERY) {
+      const batchPurchaseIds = purchaseIds.slice(index, index + PHOTO_ENRICHMENT_MAX_IDS_PER_QUERY)
+      if (!batchPurchaseIds.length) {
+        continue
+      }
+
+      try {
+        const batchPhotos = await db
+          .select({
+            purchaseEventId: tables.purchasePhotos.purchaseEventId,
+            slot: tables.purchasePhotos.slot
+          })
+          .from(tables.purchasePhotos)
+          .where(and(
+            eq(tables.purchasePhotos.userId, user.id),
+            inArray(tables.purchasePhotos.purchaseEventId, batchPurchaseIds)
+          ))
+          .all()
+
+        photos.push(...batchPhotos)
+      }
+      catch (error) {
+        // Graceful degradation: if one enrichment batch fails (e.g. transient
+        // D1 issue), keep processing remaining batches so unaffected purchases
+        // can still render photo slots.
+        console.warn('[purchases.index.get] Photo slot enrichment batch failed, continuing with remaining batches.', {
+          batchStart: index,
+          batchSize: batchPurchaseIds.length,
+          error
         })
-        .from(tables.purchasePhotos)
-        .where(and(
-          eq(tables.purchasePhotos.userId, user.id),
-          inArray(tables.purchasePhotos.purchaseEventId, purchaseIds)
-        ))
-        .all()
-    }
-    catch (error) {
-      // Graceful degradation: if photo enrichment fails (e.g. older local DB
-      // without purchase photos table), still return purchases instead of 500.
-      console.warn('[purchases.index.get] Photo slot enrichment failed, returning purchases without photoSlots.', error)
+      }
     }
 
     const slotsByPurchaseId = new Map<number, number[]>()

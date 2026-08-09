@@ -28,7 +28,6 @@ export default defineNuxtPlugin(() => {
   const offlineResourcesReadyAt = useLocalStorage<string | null>('offline-resources-ready-at', null)
   const offlinePagesStatus = useLocalStorage<'idle' | 'warming' | 'ready' | 'error'>('offline-pages-status', 'idle')
   const offlinePagesReadyAt = useLocalStorage<string | null>('offline-pages-ready-at', null)
-  const rootPurchasesWarmupDone = useLocalStorage<boolean>('offline-root-purchases-warmup-v1', false)
   const isWarmingOfflineData = ref(false)
   const isWarmingRootPurchases = ref(false)
 
@@ -312,7 +311,7 @@ export default defineNuxtPlugin(() => {
   }
 
   const warmRootPurchasesExperience = async () => {
-    if (rootPurchasesWarmupDone.value || isWarmingRootPurchases.value) {
+    if (isWarmingRootPurchases.value) {
       return
     }
 
@@ -334,8 +333,8 @@ export default defineNuxtPlugin(() => {
       const purchases = await fetchAllPurchasesForPhotoWarmup()
       const photosWarmupOk = await warmPurchasePhotoImages(purchases)
 
-      if (routeWarmupOk && photosWarmupOk) {
-        rootPurchasesWarmupDone.value = true
+      if (!routeWarmupOk || !photosWarmupOk) {
+        return
       }
     }
     catch {

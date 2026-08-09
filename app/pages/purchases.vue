@@ -328,18 +328,115 @@ const fetchAllOnlinePurchases = async (search: string, recovery: number) => {
   }
 }
 
-const persistUnfilteredPurchasePages = (pagesForCache: Array<{ page: number, response: PurchasesApiResponse }>) => {
+const persistPurchasePages = (
+  pagesForCache: Array<{ page: number, response: PurchasesApiResponse }>,
+  search: string
+) => {
+  // Filtered-search results are never read back for offline use (see
+  // getUnfilteredOfflinePurchasePages) and caching them under a key that
+  // embeds the raw search text leaks it into localStorage indefinitely
+  // (e.g. a deleted purchase's brand lingering in a stale filtered page key).
+  if (search) {
+    return
+  }
+
   for (const { page, response } of pagesForCache) {
-    offlineStore.setPurchasePage(page, purchasesFetchLimit, '', {
+    const pageLimit = response.pagination?.limit ?? purchasesFetchLimit
+
+    offlineStore.setPurchasePage(page, pageLimit, search, {
       purchases: response.purchases ?? [],
       pagination: {
         page: response.pagination?.page ?? page,
-        limit: response.pagination?.limit ?? purchasesFetchLimit,
+        limit: pageLimit,
         total: response.pagination?.total ?? (response.purchases?.length ?? 0),
         totalPages: response.pagination?.totalPages ?? 1
       }
     })
   }
+}
+
+const getCachedPurchaseIdentity = (purchase: unknown): string | null => {
+  if (!purchase || typeof purchase !== 'object') {
+    return null
+  }
+
+  const id = (purchase as { id?: unknown }).id
+  return id != null ? String(id) : null
+}
+
+// Keep the unfiltered offline baseline fresh even when the fetch that produced
+// this data was filtered (e.g. the UI filter was set right after creating a
+// purchase, before an unfiltered refetch could land). Without this, the
+// offline cache can get stuck missing/outdated purchases indefinitely because
+// nothing else ever re-runs an unfiltered fetch until the user clears the filter.
+const upsertPurchasesIntoUnfilteredCache = (purchases: unknown[]) => {
+  if (!purchases.length) {
+    return
+  }
+
+  const unfilteredKeys = Object.keys(offlineStore.purchasePages).filter(key => /^\d+:\d+:$/.test(key))
+  if (!unfilteredKeys.length) {
+    return
+  }
+
+  const knownIds = new Set<string>()
+
+  for (const key of unfilteredKeys) {
+    const pageData = offlineStore.purchasePages[key]
+    const existingPurchases = Array.isArray(pageData?.purchases) ? pageData.purchases : []
+    let changed = false
+
+    const nextPurchases = existingPurchases.map((existing: unknown) => {
+      const identity = getCachedPurchaseIdentity(existing)
+      if (identity) {
+        knownIds.add(identity)
+      }
+
+      const fresh = identity ? purchases.find(p => getCachedPurchaseIdentity(p) === identity) : undefined
+      if (!fresh) {
+        return existing
+      }
+
+      changed = true
+      return fresh
+    })
+
+    if (!changed) {
+      continue
+    }
+
+    const [pagePart, limitPart] = key.split(':')
+    offlineStore.setPurchasePage(Number.parseInt(pagePart ?? '1', 10), Number.parseInt(limitPart ?? String(purchasesFetchLimit), 10), '', {
+      purchases: nextPurchases,
+      pagination: pageData!.pagination
+    })
+  }
+
+  const missingPurchases = purchases.filter((purchase) => {
+    const identity = getCachedPurchaseIdentity(purchase)
+    return identity !== null && !knownIds.has(identity)
+  })
+
+  if (!missingPurchases.length) {
+    return
+  }
+
+  const firstKey = unfilteredKeys[0]!
+  const firstPage = offlineStore.purchasePages[firstKey]
+  const [pagePart, limitPart] = firstKey.split(':')
+  const page = Number.parseInt(pagePart ?? '1', 10)
+  const limit = Number.parseInt(limitPart ?? String(purchasesFetchLimit), 10)
+  const mergedPurchases = [...(Array.isArray(firstPage?.purchases) ? firstPage.purchases : []), ...missingPurchases]
+
+  offlineStore.setPurchasePage(page, limit, '', {
+    purchases: mergedPurchases,
+    pagination: {
+      page: firstPage?.pagination?.page ?? page,
+      limit: firstPage?.pagination?.limit ?? limit,
+      total: mergedPurchases.length,
+      totalPages: firstPage?.pagination?.totalPages ?? 1
+    }
+  })
 }
 
 const warmedPhotoUrls = useState<Record<string, true>>('offline-warmed-purchase-photo-urls', () => ({}))
@@ -440,9 +537,14 @@ const { data: purchasesResponse, refresh: refreshPurchases } = useQuery({
     try {
       const { response, pagesForCache } = await fetchAllOnlinePurchases(searchTerm, onlineRecoveryVersion.value)
 
-      // Cache ALL purchases, regardless of search term
-      // This ensures offline mode has complete data
-      persistUnfilteredPurchasePages(pagesForCache)
+      // Persist unfiltered page snapshots only — they are the source of
+      // truth for offline history. Filtered fetches are skipped inside
+      // persistPurchasePages to avoid leaking search text into the cache.
+      persistPurchasePages(pagesForCache, searchTerm)
+      // Even when this fetch was filtered, patch its purchases into the
+      // unfiltered baseline so the offline cache doesn't go stale/miss new
+      // purchases while the filter happens to be active.
+      upsertPurchasesIntoUnfilteredCache(response.purchases ?? [])
       warmPurchasePhotoCache(response.purchases ?? [])
 
       for (let i = offlineQueue.queue.length - 1; i >= 0; i--) {
@@ -945,6 +1047,10 @@ const { mutate: editPurchase, isLoading: editingPurchase } = useMutation({
 
 const removePurchaseFromOfflineCache = (purchase: Purchase) => {
   const purchaseId = String(purchase.id)
+  const purchaseBrand = purchase.brand
+  const purchaseCategory = purchase.category
+  const purchaseProductType = purchase.productType
+  const purchaseSizeLabel = purchase.sizeLabel
 
   for (const [key, pageData] of Object.entries(offlineStore.purchasePages)) {
     const purchases = Array.isArray(pageData?.purchases) ? pageData.purchases : []
@@ -953,7 +1059,21 @@ const removePurchaseFromOfflineCache = (purchase: Purchase) => {
         return true
       }
 
-      return String((item as { id?: unknown }).id ?? '') !== purchaseId
+      const record = item as {
+        id?: unknown
+        brand?: unknown
+        category?: unknown
+        productType?: unknown
+        sizeLabel?: unknown
+      }
+
+      const matchesId = String(record.id ?? '') === purchaseId
+      const matchesFingerprint = String(record.brand ?? '') === purchaseBrand
+        && String(record.category ?? '') === purchaseCategory
+        && String(record.productType ?? '') === purchaseProductType
+        && String(record.sizeLabel ?? '') === purchaseSizeLabel
+
+      return !(matchesId || matchesFingerprint)
     })
 
     if (filteredPurchases.length === purchases.length) {
@@ -967,6 +1087,11 @@ const removePurchaseFromOfflineCache = (purchase: Purchase) => {
     const limit = Number.isFinite(parsedLimit) ? parsedLimit : purchasesFetchLimit
     const search = searchParts.join(':')
     const removedCount = purchases.length - filteredPurchases.length
+
+    if (filteredPurchases.length === 0) {
+      Reflect.deleteProperty(offlineStore.purchasePages, key)
+      continue
+    }
 
     offlineStore.setPurchasePage(page, limit, search, {
       purchases: filteredPurchases,
@@ -986,6 +1111,12 @@ const { mutate: removePurchase, isLoading: deletingPurchase } = useMutation({
   }),
   async onSuccess(_deleted, purchase) {
     removePurchaseFromOfflineCache(purchase)
+    pendingPurchases.removePurchaseByBrand(
+      purchase.brand,
+      purchase.category,
+      purchase.productType,
+      purchase.sizeLabel
+    )
     await queryCache.invalidateQueries({ key: ['purchases'] })
 
     if (selectedPurchase.value?.id === purchase.id) {

@@ -23,7 +23,22 @@ export function buildOfflinePurchasesResult(
   pendingPurchases: unknown[] = []
 ): OfflinePurchasesResult {
   const allPurchases: unknown[] = []
-  const seenPurchaseIds = new Set<string>()
+  const purchasesByIdentity = new Map<string, unknown>()
+
+  const getPhotoSlots = (purchase: unknown): number[] => {
+    if (!purchase || typeof purchase !== 'object') {
+      return []
+    }
+
+    const maybeSlots = (purchase as { photoSlots?: unknown }).photoSlots
+    if (!Array.isArray(maybeSlots)) {
+      return []
+    }
+
+    return maybeSlots
+      .map(slot => Number(slot))
+      .filter(slot => Number.isFinite(slot) && slot > 0)
+  }
 
   const getPurchaseIdentity = (purchase: unknown) => {
     if (purchase && typeof purchase === 'object') {
@@ -85,27 +100,57 @@ export function buildOfflinePurchasesResult(
     return bSort.rawId.localeCompare(aSort.rawId)
   }
 
+  const mergeDuplicatePurchase = (existing: unknown, next: unknown) => {
+    const existingSlots = getPhotoSlots(existing)
+    const nextSlots = getPhotoSlots(next)
+    const mergedSlots = Array.from(new Set([...existingSlots, ...nextSlots])).sort((a, b) => a - b)
+
+    const existingPurchasedAtMs = getPurchasedAtMs(existing)
+    const nextPurchasedAtMs = getPurchasedAtMs(next)
+
+    const base = nextPurchasedAtMs >= existingPurchasedAtMs ? next : existing
+
+    if (!base || typeof base !== 'object' || mergedSlots.length === 0) {
+      return base
+    }
+
+    return {
+      ...(base as Record<string, unknown>),
+      photoSlots: mergedSlots
+    }
+  }
+
+  const upsertPurchase = (purchase: unknown) => {
+    const identity = getPurchaseIdentity(purchase)
+    if (!identity) {
+      allPurchases.push(purchase)
+      return
+    }
+
+    const existing = purchasesByIdentity.get(identity)
+    if (!existing) {
+      purchasesByIdentity.set(identity, purchase)
+      return
+    }
+
+    purchasesByIdentity.set(identity, mergeDuplicatePurchase(existing, purchase))
+  }
+
   // Add pending purchases first (they should appear at the top with most recent dates)
   for (const purchase of pendingPurchases) {
-    allPurchases.push(purchase)
+    upsertPurchase(purchase)
   }
 
   for (const key in purchasePages) {
     const cachedPage = purchasePages[key]
     if (cachedPage?.purchases) {
       for (const purchase of cachedPage.purchases) {
-        const identity = getPurchaseIdentity(purchase)
-        if (identity) {
-          if (seenPurchaseIds.has(identity)) {
-            continue
-          }
-          seenPurchaseIds.add(identity)
-        }
-
-        allPurchases.push(purchase)
+        upsertPurchase(purchase)
       }
     }
   }
+
+  allPurchases.push(...purchasesByIdentity.values())
 
   allPurchases.sort(compareByRecency)
 

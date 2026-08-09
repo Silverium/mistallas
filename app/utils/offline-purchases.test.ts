@@ -78,6 +78,28 @@ describe('buildOfflinePurchasesResult', () => {
     expect(ids).toEqual([2, 3, 1])
   })
 
+  it('preserves photoSlots when duplicate purchase ids exist across cached pages', () => {
+    const purchasePages = {
+      '1:1000:': {
+        purchases: [
+          { id: 10, brand: 'Zara', productType: 'Camiseta', sizeLabel: 'M', purchasedAt: '2026-07-30T00:00:00.000Z', photoSlots: [] }
+        ]
+      },
+      '1:100:': {
+        purchases: [
+          { id: 10, brand: 'Zara', productType: 'Camiseta', sizeLabel: 'M', purchasedAt: '2026-07-30T00:00:00.000Z', photoSlots: [1, 2] }
+        ]
+      }
+    }
+
+    const result = buildOfflinePurchasesResult(purchasePages, '', 1, 100)
+    const purchase = result.purchases[0] as { id: number, photoSlots?: number[] }
+
+    expect(result.purchases).toHaveLength(1)
+    expect(purchase.id).toBe(10)
+    expect(purchase.photoSlots).toEqual([1, 2])
+  })
+
   it('includes pending purchases in results', () => {
     const purchasePages = {
       '1:20:': {

@@ -113,7 +113,7 @@ shared/types/          # Shared TypeScript types (auth.d.ts)
 ### Testing
 - Test files co-located next to source: `*.test.ts`
 - Run: `pnpm test`
-- Use Vitest; test server utils (tiers, validation logic) — not Cloudflare-specific integrations
+- Use Vitest; test server utils (tiers, validation logic) — not Cloudflare-specific integrations do not use `pnpm vitest ...`, use `pnpm test` instead
 - Run e2e tests with Playwright: `pnpm test:e2e` (requires `pnpm run preview` running)
 
 ### Code Style
