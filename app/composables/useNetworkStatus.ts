@@ -1,4 +1,3 @@
-import { blobToBase64 } from '../utils/image-compression'
 import type { QueuedMutation } from './useOfflineQueue'
 import type { PendingPhoto } from './usePendingPhotosStore'
 import { useOfflineQueueStore } from './useOfflineQueue'
@@ -195,6 +194,15 @@ export async function flushOfflineWork({
       if (status != null && status >= 400 && status < 500 && status !== 401 && status !== 403) {
         offlineQueue.dequeue(entry.id)
         droppedMutations++
+        // Also remove any pending photo preview for this dropped upload so it
+        // does not get stuck in the store and retried indefinitely.
+        const droppedPurchaseId = getPurchaseIdFromPhotoUploadMutation(entry)
+        if (droppedPurchaseId != null) {
+          const pendingForDropped = pendingPhotos.pendingPhotos.find(p => p.purchaseId === droppedPurchaseId)
+          if (pendingForDropped) {
+            pendingPhotos.removePhoto(pendingForDropped.id)
+          }
+        }
         continue
       }
 
@@ -239,14 +247,13 @@ export async function flushOfflineWork({
     }
 
     try {
-      const response = await fetch(photo.blobUrl)
-      const blob = await response.blob()
-      const fileBase64 = await blobToBase64(blob)
-
+      // Use photo.fileBase64 directly — blobUrl is ephemeral (blob: URLs expire
+      // after a page reload) and after localStorage deserialization it is set to
+      // the same fileBase64 value anyway, so the fetch round-trip is redundant.
       await request(`/api/purchases/${photo.purchaseId}/photos`, {
         method: 'POST',
         body: {
-          fileBase64,
+          fileBase64: photo.fileBase64,
           mimeType: photo.mimeType
         }
       })
@@ -254,8 +261,16 @@ export async function flushOfflineWork({
       pendingPhotos.removePhoto(photo.id)
       uploadedFromPendingStore++
     }
-    catch {
-      // Stop on first failure to avoid skipping order-sensitive retries.
+    catch (error) {
+      const status = getErrorStatus(error)
+      // Drop unrecoverable client errors (e.g. 404 purchase deleted, 400 slot
+      // already full) so they don't block all retries or loop forever.
+      if (status != null && status >= 400 && status < 500 && status !== 401 && status !== 403) {
+        pendingPhotos.removePhoto(photo.id)
+        droppedMutations++
+        continue
+      }
+      // Stop on network/server failures to preserve retry order.
       break
     }
   }
