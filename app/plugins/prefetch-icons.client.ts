@@ -94,6 +94,7 @@ export default defineNuxtPlugin(() => {
       return
     }
 
+    const previousIconsStatus = offlineIconsStatus.value
     offlineIconsStatus.value = 'warming'
 
     const fetches = Object.entries(iconQueries)
@@ -111,7 +112,7 @@ export default defineNuxtPlugin(() => {
     const hasFailure = results.some(result => result.status === 'rejected')
 
     if (hasFailure) {
-      offlineIconsStatus.value = 'error'
+      offlineIconsStatus.value = navigator.onLine ? 'error' : previousIconsStatus
       return
     }
 
@@ -206,6 +207,7 @@ export default defineNuxtPlugin(() => {
       return
     }
 
+    const previousResourcesStatus = offlineResourcesStatus.value
     offlineResourcesStatus.value = 'warming'
 
     const results = await Promise.allSettled([
@@ -215,7 +217,9 @@ export default defineNuxtPlugin(() => {
     const hasFailure = results.some(result => result.status === 'rejected')
 
     if (hasFailure) {
-      offlineResourcesStatus.value = 'error'
+      // If we went offline during the warmup, restore the previous status instead
+      // of showing a stale error to the user on the next page load.
+      offlineResourcesStatus.value = navigator.onLine ? 'error' : previousResourcesStatus
       return
     }
 
@@ -228,6 +232,7 @@ export default defineNuxtPlugin(() => {
       return
     }
 
+    const previousPagesStatus = offlinePagesStatus.value
     offlinePagesStatus.value = 'warming'
 
     const results = await Promise.allSettled([
@@ -237,7 +242,9 @@ export default defineNuxtPlugin(() => {
     const hasFailure = results.some(result => result.status === 'rejected')
 
     if (hasFailure) {
-      offlinePagesStatus.value = 'error'
+      // If we went offline during the warmup, restore the previous status instead
+      // of showing a stale error to the user on the next page load.
+      offlinePagesStatus.value = navigator.onLine ? 'error' : previousPagesStatus
       return
     }
 
