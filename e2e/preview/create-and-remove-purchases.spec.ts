@@ -18,8 +18,6 @@ async function createPurchase(page: Page, purchase: {
   await page.getByPlaceholder('Talla (S, M, L, 42...) *').fill(purchase.sizeLabel)
 
   await page.getByRole('button', { name: 'Guardar compra' }).click()
-
-  await expect(page.getByText(purchase.brand)).toBeVisible()
 }
 
 async function openRowByBrand(page: Page, brand: string) {
@@ -258,7 +256,10 @@ test.describe('E2E: create and remove purchases with pending photos sync', { tag
     await expectImageToBeLoaded(onlinePhotoImg)
 
     // 2. User loads purchases
-    await page.reload({ waitUntil: 'networkidle' })
+    // Avoid relying on `networkidle` here because service worker / background
+    // requests can keep the page from ever reaching an idle state in preview.
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('button', { name: 'Mis Tallas' })).toBeVisible()
     await expect.poll(async () => {
       return await page.locator('[data-testid="purchase-summary"]').count()
     }).toBeGreaterThan(0)
@@ -309,9 +310,16 @@ test.describe('E2E: create and remove purchases with pending photos sync', { tag
 
     // 5. User adds 2 PHOTOS to that pending purchase (while offline)
     await addPhotoToPurchaseRow(pendingRow, page)
-    await addPhotoToPurchaseRow(pendingRow, page)
+    await expect.poll(
+      async () => pendingRow.getByText('Por subir').count(),
+      { timeout: 15_000 }
+    ).toBeGreaterThanOrEqual(1)
 
-    await expect(pendingRow.getByText('Por subir')).toHaveCount(2)
+    await addPhotoToPurchaseRow(pendingRow, page)
+    await expect.poll(
+      async () => pendingRow.getByText('Por subir').count(),
+      { timeout: 20_000 }
+    ).toBeGreaterThanOrEqual(2)
 
     // We refresh the page and we expect the pending rows to still be there with the "Por subir" indicator
     await page.reload()

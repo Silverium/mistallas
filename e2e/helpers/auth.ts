@@ -40,8 +40,7 @@ export async function authenticateViaE2ELogin(
     if (!authResponse.ok()) {
       throw new Error(`Failed to seed E2E auth session: ${authResponse.status()}`)
     }
-
-    console.log('  ✓ User authenticated via e2e-login endpoint')
+    console.log('\x1b[32m%s\x1b[0m', '  ℹ️ User authenticated via e2e-login endpoint') // green log
   }
   catch (err) {
     console.log(`  ⚠ Auth error (continuing): ${err}`)

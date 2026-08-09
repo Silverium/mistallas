@@ -3,6 +3,13 @@ import { test, expect } from '@playwright/test'
 import { authenticateViaE2ELogin } from '../helpers/auth'
 import { addPhotoToPurchaseRow } from '../helpers/addPhotoToRow'
 
+const getReconnectToastCount = (page: Page) => {
+  return page.evaluate(() => {
+    const win = window as unknown as Record<string, unknown>
+    return Number(win.__reconnectToastCount ?? 0)
+  })
+}
+
 test.describe('offline indicator consistency', { tag: '@offline' }, () => {
   test.beforeEach(async ({ context }) => {
     await context.setOffline(false)
@@ -45,16 +52,17 @@ test.describe('offline indicator consistency', { tag: '@offline' }, () => {
 
   async function installReconnectToastCounter(page: Page) {
     await page.evaluate(() => {
+      const win = window as unknown as Record<string, unknown>
       const marker = '__reconnectToastCounterInstalled'
-      if ((window as Window & Record<string, unknown>)[marker]) {
+      if (win[marker]) {
         return
       }
 
-      ;(window as Window & Record<string, unknown>).__reconnectToastCount = 0
+      win.__reconnectToastCount = 0
 
       const increment = () => {
-        const current = Number((window as Window & Record<string, unknown>).__reconnectToastCount ?? 0)
-        ;(window as Window & Record<string, unknown>).__reconnectToastCount = current + 1
+        const current = Number(win.__reconnectToastCount ?? 0)
+        win.__reconnectToastCount = current + 1
       }
 
       const countedToastItems = new WeakSet<HTMLElement>()
@@ -108,8 +116,8 @@ test.describe('offline indicator consistency', { tag: '@offline' }, () => {
         subtree: true
       })
 
-      ;(window as Window & Record<string, unknown>).__reconnectToastObserver = observer
-      ;(window as Window & Record<string, unknown>)[marker] = true
+      win.__reconnectToastObserver = observer
+      win[marker] = true
     })
   }
 
@@ -269,14 +277,12 @@ test.describe('offline indicator consistency', { tag: '@offline' }, () => {
     }, { timeout: 30_000 }).toBe(true)
 
     await expect.poll(
-      () => page.evaluate(() => Number((window as Window & Record<string, unknown>).__reconnectToastCount ?? 0)),
+      () => getReconnectToastCount(page),
       { timeout: 10_000 }
     ).toBe(1)
 
     await page.waitForTimeout(4_000)
-    await expect(
-      page.evaluate(() => Number((window as Window & Record<string, unknown>).__reconnectToastCount ?? 0))
-    ).resolves.toBe(1)
+    await expect(getReconnectToastCount(page)).resolves.toBe(1)
   })
 
   test('shows one reconnect toast per reconnect cycle (two cycles => two toasts)', async ({ page, context }) => {
@@ -294,14 +300,12 @@ test.describe('offline indicator consistency', { tag: '@offline' }, () => {
       await expect(page.getByTestId('offline-indicator')).toHaveCount(0)
 
       await expect.poll(
-        () => page.evaluate(() => Number((window as Window & Record<string, unknown>).__reconnectToastCount ?? 0)),
+        () => getReconnectToastCount(page),
         { timeout: 10_000 }
       ).toBe(i + 1)
     }
 
     await page.waitForTimeout(3_000)
-    await expect(
-      page.evaluate(() => Number((window as Window & Record<string, unknown>).__reconnectToastCount ?? 0))
-    ).resolves.toBe(2)
+    await expect(getReconnectToastCount(page)).resolves.toBe(2)
   })
 })
