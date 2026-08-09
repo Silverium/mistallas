@@ -117,7 +117,7 @@ test.describe('E2E: offline pending photo preview renders correctly', { tag: '@o
 
       const pendingBadgeCount = await refreshedRow.getByTestId('purchase-pending-indicator').count()
       const pendingPhotoCount = await refreshedRow.getByText('Por subir').count()
-      const uploadedPhotoCount = await refreshedRow.locator('img[alt^="Foto "]:not([alt="Foto pendiente"])').count()
+      const uploadedPhotoCount = await refreshedRow.locator('img[alt^="Foto 1"]:not([alt="Foto pendiente"])').count()
 
       return pendingBadgeCount === 0 && pendingPhotoCount === 0 && uploadedPhotoCount >= 1
     }, { timeout: 30_000 }).toBe(true)

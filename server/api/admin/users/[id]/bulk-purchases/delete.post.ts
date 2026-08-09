@@ -2,6 +2,18 @@ import { eq, and, like, inArray } from 'drizzle-orm'
 import { requireAdminAccess } from '../../../../../utils/admin'
 import { tables, useDB } from '../../../../../utils/db'
 
+const D1_IN_CLAUSE_CHUNK_SIZE = 100
+
+const chunkIds = <T>(items: T[], chunkSize: number) => {
+  const chunks: T[][] = []
+
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize))
+  }
+
+  return chunks
+}
+
 export default eventHandler(async (event) => {
   await requireAdminAccess(event)
 
@@ -41,20 +53,31 @@ export default eventHandler(async (event) => {
   }
 
   const testPurchaseIds = testPurchases.map(p => p.id)
+  const purchaseIdChunks = chunkIds(testPurchaseIds, D1_IN_CLAUSE_CHUNK_SIZE)
 
   // Delete measurement snapshots for test purchases
-  const deletedSnapshots = await db
-    .delete(tables.purchaseMeasurementSnapshots)
-    .where(inArray(tables.purchaseMeasurementSnapshots.purchaseEventId, testPurchaseIds))
-    .returning()
-    .all()
+  let deletedSnapshotsCount = 0
+  for (const idsChunk of purchaseIdChunks) {
+    const deletedSnapshotsChunk = await db
+      .delete(tables.purchaseMeasurementSnapshots)
+      .where(inArray(tables.purchaseMeasurementSnapshots.purchaseEventId, idsChunk))
+      .returning({ id: tables.purchaseMeasurementSnapshots.id })
+      .all()
+
+    deletedSnapshotsCount += deletedSnapshotsChunk.length
+  }
 
   // Delete photos for test purchases
-  const deletedPhotos = await db
-    .delete(tables.purchasePhotos)
-    .where(inArray(tables.purchasePhotos.purchaseEventId, testPurchaseIds))
-    .returning()
-    .all()
+  let deletedPhotosCount = 0
+  for (const idsChunk of purchaseIdChunks) {
+    const deletedPhotosChunk = await db
+      .delete(tables.purchasePhotos)
+      .where(inArray(tables.purchasePhotos.purchaseEventId, idsChunk))
+      .returning({ id: tables.purchasePhotos.id })
+      .all()
+
+    deletedPhotosCount += deletedPhotosChunk.length
+  }
 
   // Delete test purchases
   const deletedPurchases = await db
@@ -68,8 +91,8 @@ export default eventHandler(async (event) => {
 
   return {
     deleted: deletedPurchases.length,
-    deletedSnapshots: deletedSnapshots.length,
-    deletedPhotos: deletedPhotos.length,
+    deletedSnapshots: deletedSnapshotsCount,
+    deletedPhotos: deletedPhotosCount,
     userId,
     message: `Deleted ${deletedPurchases.length} test purchases and related data for user ${userId}`
   }

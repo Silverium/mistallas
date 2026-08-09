@@ -6,6 +6,8 @@ import { tables, useDB } from '../../utils/db'
 export default eventHandler(async (event) => {
   const { user } = await requireUserSession(event)
 
+  setHeader(event, 'Cache-Control', 'private, no-store')
+
   const query = await useValidatedQuery(event, {
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().positive().default(20).transform(value => Math.min(value, 5000)),

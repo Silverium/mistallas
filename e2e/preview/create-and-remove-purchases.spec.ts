@@ -249,10 +249,10 @@ test.describe('E2E: create and remove purchases with pending photos sync', { tag
     await createPurchase(page, onlinePurchase)
     const onlineRow = await openRowByBrand(page, onlinePurchase.brand)
     await addPhotoToPurchaseRow(onlineRow, page)
-    await expect(onlineRow.locator('img[alt^="Foto "][alt*=" de "]')).toHaveCount(1)
+    await expect(onlineRow.locator('img[alt^="Foto 1"]')).toHaveCount(1)
 
     // Capture photo identity and verify it is fully decoded while online
-    const onlinePhotoImg = onlineRow.locator('img[alt^="Foto "][alt*=" de "]').first()
+    const onlinePhotoImg = onlineRow.locator('img[alt^="Foto 1"]').first()
     const onlinePhotoAlt = await onlinePhotoImg.getAttribute('alt')
     const onlinePhotoSrc = await onlinePhotoImg.getAttribute('src')
     await expectImageToBeLoaded(onlinePhotoImg)
@@ -296,7 +296,7 @@ test.describe('E2E: create and remove purchases with pending photos sync', { tag
 
     // Cached online photo must remain visible and decoded offline (same src/alt, naturalWidth > 0)
     const cachedOnlineRow = await openRowByBrand(page, onlinePurchase.brand)
-    const cachedPhoto = cachedOnlineRow.locator('img[alt^="Foto "][alt*=" de "]').first()
+    const cachedPhoto = cachedOnlineRow.locator('img[alt^="Foto 1"]').first()
     await expect(cachedPhoto).toBeVisible()
     await expect(cachedPhoto).toHaveAttribute('src', onlinePhotoSrc as string)
     await expect(cachedPhoto).toHaveAttribute('alt', onlinePhotoAlt as string)
@@ -330,15 +330,15 @@ test.describe('E2E: create and remove purchases with pending photos sync', { tag
 
       const pendingBadgeCount = await refreshedRow.getByTestId('purchase-pending-indicator').count()
       const pendingPhotoCount = await refreshedRow.getByText('Por subir').count()
-      const uploadedPhotoCount = await refreshedRow.locator('img[alt^="Foto "][alt*=" de "]').count()
+      const uploadedPhotoCount = await refreshedRow.locator('img[alt^="Foto 2"]').count()
 
-      return pendingBadgeCount === 0 && pendingPhotoCount === 0 && uploadedPhotoCount >= 2
+      return pendingBadgeCount === 0 && pendingPhotoCount === 0 && uploadedPhotoCount >= 1
     }, { timeout: 30000 }).toBe(true)
 
     pendingRow = await openRowByBrand(page, pendingPurchase.brand)
     await expect(pendingRow.getByTestId('purchase-pending-indicator')).toHaveCount(0)
     await expect(pendingRow.getByText('Por subir')).toHaveCount(0)
-    await expect(pendingRow.locator('img[alt^="Foto "][alt*=" de "]')).toHaveCount(2)
+    await expect(pendingRow.locator('img[alt^="Foto 2"]')).toHaveCount(1)
     const pendingDbId = await pendingRow.getAttribute('data-db-id')
 
     // Purchases list must not flash to an empty state when briefly toggling offline → online
@@ -363,7 +363,7 @@ test.describe('E2E: create and remove purchases with pending photos sync', { tag
     await context.setOffline(false)
     await expect.poll(async () => {
       return await onlineRowForOfflinePhoto.getByText('Por subir').count() === 0
-        && await onlineRowForOfflinePhoto.locator('img[alt^="Foto "][alt*=" de "]').count() >= 2
+        && await onlineRowForOfflinePhoto.locator('img[alt^="Foto 2"]').count() >= 1
     }, { timeout: 30000 }).toBe(true)
     const onlineDbId = await onlineRowForOfflinePhoto.getAttribute('data-db-id')
 

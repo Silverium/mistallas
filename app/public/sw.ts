@@ -138,17 +138,9 @@ registerRoute(
   })
 )
 
-registerRoute(
-  /\/api\/purchases/,
-  new NetworkFirst({
-    cacheName: 'api-purchases',
-    networkTimeoutSeconds: 5,
-    plugins: [
-      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 604800 }),
-      new CacheableResponsePlugin({ statuses: [0, 200] })
-    ]
-  })
-)
+// Intentionally do not cache /api/purchases list responses in the service worker.
+// Purchases are synced to app-managed offline storage, and SW caching here can
+// serve stale photoSlots on online page loads.
 
 // Cache purchase photo images aggressively - they should always be available offline.
 registerRoute(

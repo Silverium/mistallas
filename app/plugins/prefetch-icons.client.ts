@@ -15,6 +15,7 @@ const iconQueries = extractIconQueriesFromSources(
 
 export default defineNuxtPlugin(() => {
   const { app } = useRuntimeConfig()
+  const route = useRoute()
   const { loggedIn, liveLoggedIn } = useEffectiveSession()
   const { syncAll, isSyncing, status } = useSyncAll()
   const offlineData = useOfflineDataStore()
@@ -27,7 +28,9 @@ export default defineNuxtPlugin(() => {
   const offlineResourcesReadyAt = useLocalStorage<string | null>('offline-resources-ready-at', null)
   const offlinePagesStatus = useLocalStorage<'idle' | 'warming' | 'ready' | 'error'>('offline-pages-status', 'idle')
   const offlinePagesReadyAt = useLocalStorage<string | null>('offline-pages-ready-at', null)
+  const rootPurchasesWarmupDone = useLocalStorage<boolean>('offline-root-purchases-warmup-v1', false)
   const isWarmingOfflineData = ref(false)
+  const isWarmingRootPurchases = ref(false)
 
   const clearLegacyPersistedStateCookies = () => {
     const legacyCookieKeys = [
@@ -242,6 +245,100 @@ export default defineNuxtPlugin(() => {
     offlinePagesReadyAt.value = new Date().toLocaleString('es')
   }
 
+  type PurchasesApiResponse = {
+    purchases?: Array<{ id?: number | string, photoSlots?: unknown[] }>
+    pagination?: {
+      page?: number
+      totalPages?: number
+    }
+  }
+
+  const fetchAllPurchasesForPhotoWarmup = async () => {
+    const purchases: Array<{ id?: number | string, photoSlots?: unknown[] }> = []
+    let page = 1
+    let totalPages = 1
+
+    do {
+      const response = await $fetch<PurchasesApiResponse>(`/api/purchases?page=${page}&limit=500`)
+      purchases.push(...(response.purchases ?? []))
+      totalPages = Math.max(1, Number(response.pagination?.totalPages ?? 1))
+      page += 1
+    } while (page <= totalPages)
+
+    return purchases
+  }
+
+  const warmPurchasePhotoImages = async (purchases: Array<{ id?: number | string, photoSlots?: unknown[] }>) => {
+    const urls = new Set<string>()
+
+    for (const purchase of purchases) {
+      const purchaseId = purchase.id
+      if (typeof purchaseId !== 'number' && typeof purchaseId !== 'string') {
+        continue
+      }
+
+      const normalizedPurchaseId = Number(purchaseId)
+      if (!Number.isFinite(normalizedPurchaseId) || normalizedPurchaseId <= 0) {
+        continue
+      }
+
+      const slots = Array.isArray(purchase.photoSlots) ? purchase.photoSlots : []
+      for (const rawSlot of slots) {
+        const slot = Number(rawSlot)
+        if (!Number.isFinite(slot) || slot <= 0) {
+          continue
+        }
+
+        urls.add(`/api/purchases/${normalizedPurchaseId}/photos/${slot}`)
+      }
+    }
+
+    if (!urls.size) {
+      return true
+    }
+
+    const results = await Promise.allSettled(
+      [...urls].map(url => fetch(url, { credentials: 'same-origin' }))
+    )
+
+    return results.every(result => result.status === 'fulfilled' && result.value.ok)
+  }
+
+  const warmRootPurchasesExperience = async () => {
+    if (rootPurchasesWarmupDone.value || isWarmingRootPurchases.value) {
+      return
+    }
+
+    if (!navigator.onLine || !loggedIn.value || route.path !== '/') {
+      return
+    }
+
+    isWarmingRootPurchases.value = true
+
+    try {
+      await warmOfflineData()
+
+      const routeWarmupResults = await Promise.allSettled([
+        prefetchRouteDocument('/purchases'),
+        preloadRouteComponents('/purchases')
+      ])
+      const routeWarmupOk = routeWarmupResults.every(result => result.status === 'fulfilled')
+
+      const purchases = await fetchAllPurchasesForPhotoWarmup()
+      const photosWarmupOk = await warmPurchasePhotoImages(purchases)
+
+      if (routeWarmupOk && photosWarmupOk) {
+        rootPurchasesWarmupDone.value = true
+      }
+    }
+    catch {
+      // Best-effort warmup only. We intentionally keep retries available.
+    }
+    finally {
+      isWarmingRootPurchases.value = false
+    }
+  }
+
   const warmOfflineAssets = () => {
     void warmOfflineData()
     void warmOfflineResources()
@@ -264,6 +361,14 @@ export default defineNuxtPlugin(() => {
 
   watch([loggedIn, lastSyncedAt], scheduleWarmup, { immediate: true })
 
+  watch([loggedIn, () => route.path], ([nextLoggedIn, path]) => {
+    if (!nextLoggedIn || path !== '/') {
+      return
+    }
+
+    void warmRootPurchasesExperience()
+  }, { immediate: true })
+
   watch([loggedIn, isSyncing], ([nextLoggedIn, nextIsSyncing]) => {
     if (!nextLoggedIn || nextIsSyncing || !navigator.onLine) {
       return
@@ -277,6 +382,7 @@ export default defineNuxtPlugin(() => {
   window.addEventListener('online', () => {
     void ensureServiceWorkerControl()
     void warmOfflineData(true)
+    void warmRootPurchasesExperience()
     scheduleWarmup()
   })
 })
