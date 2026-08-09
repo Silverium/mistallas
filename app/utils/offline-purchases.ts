@@ -49,6 +49,42 @@ export function buildOfflinePurchasesResult(
     return Number.isFinite(timestamp) ? timestamp : 0
   }
 
+  const getSortId = (purchase: unknown) => {
+    if (!purchase || typeof purchase !== 'object') {
+      return { numericId: null as number | null, rawId: '' }
+    }
+
+    const rawId = String((purchase as { id?: unknown }).id ?? '')
+    const numericId = Number(rawId)
+    return {
+      numericId: Number.isFinite(numericId) ? numericId : null,
+      rawId
+    }
+  }
+
+  const compareByRecency = (a: unknown, b: unknown) => {
+    const purchasedAtDiff = getPurchasedAtMs(b) - getPurchasedAtMs(a)
+    if (purchasedAtDiff !== 0) {
+      return purchasedAtDiff
+    }
+
+    const aSort = getSortId(a)
+    const bSort = getSortId(b)
+
+    // Keep pending (non-numeric IDs) first when purchase date is tied.
+    const aIsPending = aSort.numericId == null && aSort.rawId.length > 0
+    const bIsPending = bSort.numericId == null && bSort.rawId.length > 0
+    if (aIsPending !== bIsPending) {
+      return aIsPending ? -1 : 1
+    }
+
+    if (aSort.numericId != null && bSort.numericId != null) {
+      return bSort.numericId - aSort.numericId
+    }
+
+    return bSort.rawId.localeCompare(aSort.rawId)
+  }
+
   // Add pending purchases first (they should appear at the top with most recent dates)
   for (const purchase of pendingPurchases) {
     allPurchases.push(purchase)
@@ -71,7 +107,7 @@ export function buildOfflinePurchasesResult(
     }
   }
 
-  allPurchases.sort((a, b) => getPurchasedAtMs(b) - getPurchasedAtMs(a))
+  allPurchases.sort(compareByRecency)
 
   let filtered = allPurchases
   if (search.trim()) {
@@ -82,7 +118,14 @@ export function buildOfflinePurchasesResult(
         score: scoreFn(purchase as Record<string, unknown>, searchWords)
       }))
       .filter(item => item.score >= 0.2)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => {
+        const scoreDiff = b.score - a.score
+        if (scoreDiff !== 0) {
+          return scoreDiff
+        }
+
+        return compareByRecency(a.purchase, b.purchase)
+      })
       .map(item => item.purchase)
   }
 

@@ -38,7 +38,7 @@ export default eventHandler(async (event) => {
         .select()
         .from(tables.purchaseEvents)
         .where(eq(tables.purchaseEvents.userId, user.id))
-        .orderBy(desc(tables.purchaseEvents.purchasedAt))
+        .orderBy(desc(tables.purchaseEvents.purchasedAt), desc(tables.purchaseEvents.id))
         .all()
     }
     catch (error) {
@@ -57,7 +57,7 @@ export default eventHandler(async (event) => {
           })
           .from(tables.purchaseEvents)
           .where(eq(tables.purchaseEvents.userId, user.id))
-          .orderBy(desc(tables.purchaseEvents.purchasedAt))
+          .orderBy(desc(tables.purchaseEvents.purchasedAt), desc(tables.purchaseEvents.id))
           .all()
 
         purchases = coreRows.map(row => ({
@@ -77,13 +77,31 @@ export default eventHandler(async (event) => {
     let filtered = purchases
     if (query.search?.trim()) {
       const words = query.search.trim().split(/\s+/).filter(Boolean)
+
+      const getPurchasedAtMs = (purchase: { purchasedAt: Date }) => {
+        const timestamp = new Date(purchase.purchasedAt).getTime()
+        return Number.isFinite(timestamp) ? timestamp : 0
+      }
+
       filtered = purchases
         .map(purchase => ({
           purchase,
           score: calculateMultiWordSearchScore(purchase, words)
         }))
         .filter(item => item.score >= 0.2) // Only include matches with score >= 0.2
-        .sort((a, b) => b.score - a.score) // Sort by relevance
+        .sort((a, b) => {
+          const scoreDiff = b.score - a.score
+          if (scoreDiff !== 0) {
+            return scoreDiff
+          }
+
+          const purchasedAtDiff = getPurchasedAtMs(b.purchase) - getPurchasedAtMs(a.purchase)
+          if (purchasedAtDiff !== 0) {
+            return purchasedAtDiff
+          }
+
+          return Number(b.purchase.id) - Number(a.purchase.id)
+        }) // Sort by relevance, then recency/id for deterministic order
         .map(item => item.purchase)
     }
 

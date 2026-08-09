@@ -141,4 +141,22 @@ describe('buildOfflinePurchasesResult', () => {
     expect(result.purchases).toHaveLength(1)
     expect((result.purchases[0] as { id: string }).id).toBe('pending-1')
   })
+
+  it('uses deterministic date/id tie-breakers when search scores tie', () => {
+    const purchasePages = {
+      '1:20:': {
+        purchases: [
+          { id: 317, brand: 'Nike', productType: 'Tee', sizeLabel: 'M', purchasedAt: '2026-01-01T00:00:00.000Z' },
+          { id: 1278, brand: 'Nike', productType: 'Tee', sizeLabel: 'M', purchasedAt: '2026-01-01T00:00:00.000Z' },
+          { id: 310, brand: 'Nike', productType: 'Tee', sizeLabel: 'M', purchasedAt: '2025-12-31T00:00:00.000Z' }
+        ]
+      }
+    }
+
+    const scoreFn = () => 1
+    const result = buildOfflinePurchasesResult(purchasePages, 'nike', 1, 20, scoreFn)
+    const ids = result.purchases.map(item => (item as { id: number }).id)
+
+    expect(ids).toEqual([1278, 317, 310])
+  })
 })
