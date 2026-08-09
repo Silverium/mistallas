@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calculatePurchaseSearchScore, fuzzyMatchScore } from '../../utils/fuzzy-search'
+import { calculatePurchaseSearchScore, fuzzyMatchScore } from '@root/server/utils/fuzzy-search'
 
 describe('Fuzzy Search', () => {
   describe('fuzzyMatchScore', () => {

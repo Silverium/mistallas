@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { useValidatedParams, zh } from 'h3-zod'
-import { tables, useDB } from '../../../utils/db'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   try {

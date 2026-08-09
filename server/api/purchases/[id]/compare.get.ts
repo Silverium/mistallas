@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { useValidatedParams, zh } from 'h3-zod'
-import { decodeMeasurement, fromScaled, measurementFields } from '../../../utils/measurements'
-import type { MeasurementKey, MeasurementSource } from '../../../utils/measurements'
+import { decodeMeasurement, fromScaled, measurementFields } from '@root/server/utils/measurements'
+import type { MeasurementKey, MeasurementSource } from '@root/server/utils/measurements'
 
 type Metric = {
   before: number | null

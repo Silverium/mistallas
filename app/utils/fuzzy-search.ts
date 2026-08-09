@@ -2,4 +2,4 @@ export {
   fuzzyMatchScore,
   calculatePurchaseSearchScore,
   calculateMultiWordSearchScore
-} from '../../lib/fuzzy-search'
+} from '@root/lib/fuzzy-search'

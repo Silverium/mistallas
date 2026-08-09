@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { useValidatedBody, z } from 'h3-zod'
-import { createStripeCustomer, createCheckoutSession } from '../../utils/stripe'
-import { tables, useDB } from '../../utils/db'
+import { createStripeCustomer, createCheckoutSession } from '@root/server/utils/stripe'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   const { user } = await requireUserSession(event)

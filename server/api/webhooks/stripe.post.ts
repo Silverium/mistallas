@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { verifyWebhookSignature } from '../../utils/stripe'
-import { tables, useDB } from '../../utils/db'
+import { verifyWebhookSignature } from '@root/server/utils/stripe'
+import { tables, useDB } from '@root/server/utils/db'
 import type Stripe from 'stripe'
 
 export default eventHandler(async (event) => {

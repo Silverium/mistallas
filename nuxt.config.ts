@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const packageJson = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
@@ -39,10 +40,16 @@ export default defineNuxtConfig({
       appVersion
     }
   },
+  alias: {
+    '@root': fileURLToPath(new URL('.', import.meta.url))
+  },
   sourcemap: process.env.NUXT_DEV_SERVER === 'true' ? { server: true, client: true } : false,
   future: { compatibilityVersion: 4 },
   compatibilityDate: '2025-12-20',
   nitro: {
+    alias: {
+      '@root': fileURLToPath(new URL('.', import.meta.url))
+    },
     experimental: {
       database: true // this turns on the feature
     },

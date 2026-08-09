@@ -1,5 +1,5 @@
 import { useValidatedBody, z } from 'h3-zod'
-import { encodeMeasurementInsert, measurementCreateSchema } from '../../utils/measurements'
+import { encodeMeasurementInsert, measurementCreateSchema } from '@root/server/utils/measurements'
 
 export default eventHandler(async (event) => {
   const { measurements } = await useValidatedBody(event, {

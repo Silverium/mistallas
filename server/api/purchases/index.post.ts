@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { useValidatedBody, z } from 'h3-zod'
-import { getUserPurchaseCount, isAtLimit } from '../../utils/tiers'
-import { tables, useDB } from '../../utils/db'
+import { getUserPurchaseCount, isAtLimit } from '@root/server/utils/tiers'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   const input = await useValidatedBody(event, {

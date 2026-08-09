@@ -89,7 +89,7 @@ vi.mock('h3-zod', () => ({
   z: mocks.z
 }))
 
-vi.mock('../../utils/db', () => ({
+vi.mock('@root/server/utils/db', () => ({
   useDB: mocks.useDB,
   tables: mocks.tables,
   sql: (strings: TemplateStringsArray) => strings.join('')

@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import { useValidatedBody, useValidatedParams, zh } from 'h3-zod'
-import { encodeMeasurementPatch, measurementPatchSchema } from '../../utils/measurements'
+import { encodeMeasurementPatch, measurementPatchSchema } from '@root/server/utils/measurements'
 
 export default eventHandler(async (event) => {
   const { id } = await useValidatedParams(event, {

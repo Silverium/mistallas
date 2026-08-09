@@ -1,6 +1,6 @@
 import { eq, and, like, inArray } from 'drizzle-orm'
-import { requireAdminAccess } from '../../../../../utils/admin'
-import { tables, useDB } from '../../../../../utils/db'
+import { requireAdminAccess } from '@root/server/utils/admin'
+import { tables, useDB } from '@root/server/utils/db'
 
 const D1_IN_CLAUSE_CHUNK_SIZE = 100
 

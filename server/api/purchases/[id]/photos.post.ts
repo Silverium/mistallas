@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm'
 import { useValidatedParams, z } from 'h3-zod'
-import { tables, useDB } from '../../../utils/db'
+import { tables, useDB } from '@root/server/utils/db'
 
 const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const
 

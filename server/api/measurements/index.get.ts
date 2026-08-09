@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { decodeMeasurement } from '../../utils/measurements'
+import { decodeMeasurement } from '@root/server/utils/measurements'
 
 export default eventHandler(async (event) => {
   const { user } = await requireUserSession(event)

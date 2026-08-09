@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { useValidatedQuery, z } from 'h3-zod'
-import { requireAdminAccess } from '../../../utils/admin'
-import { getUserPurchaseCount } from '../../../utils/tiers'
-import { tables, useDB } from '../../../utils/db'
+import { requireAdminAccess } from '@root/server/utils/admin'
+import { getUserPurchaseCount } from '@root/server/utils/tiers'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   await requireAdminAccess(event)

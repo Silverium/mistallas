@@ -1,5 +1,5 @@
-import { getPurchaseLimit } from '../../utils/tiers'
-import type { Tier } from '../../utils/tiers'
+import { getPurchaseLimit } from '@root/server/utils/tiers'
+import type { Tier } from '@root/server/utils/tiers'
 
 export type TierInfo = {
   tier: Tier

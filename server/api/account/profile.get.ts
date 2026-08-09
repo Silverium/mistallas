@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { getUserPurchaseCount, getPurchaseLimit } from '../../utils/tiers'
-import { tables, useDB } from '../../utils/db'
+import { getUserPurchaseCount, getPurchaseLimit } from '@root/server/utils/tiers'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   const { user } = await requireUserSession(event)

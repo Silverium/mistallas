@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { useValidatedBody, z } from 'h3-zod'
-import { requireAdminAccess } from '../../../../utils/admin'
-import { tables, useDB } from '../../../../utils/db'
-import { encodeMeasurementInsert } from '../../../../utils/measurements'
+import { requireAdminAccess } from '@root/server/utils/admin'
+import { tables, useDB } from '@root/server/utils/db'
+import { encodeMeasurementInsert } from '@root/server/utils/measurements'
 
 export default eventHandler(async (event) => {
   await requireAdminAccess(event)

@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { useValidatedBody, useValidatedParams, z } from 'h3-zod'
-import { decodeMeasurement } from '../../../utils/measurements'
-import { tables, useDB } from '../../../utils/db'
+import { decodeMeasurement } from '@root/server/utils/measurements'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   const { id } = await useValidatedParams(event, {

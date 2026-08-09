@@ -108,7 +108,7 @@ vi.mock('drizzle-orm', () => ({
   desc: vi.fn((column: unknown) => column)
 }))
 
-vi.mock('../../utils/db', () => ({
+vi.mock('@root/server/utils/db', () => ({
   tables: mocks.tables,
   useDB: mocks.useDB
 }))
@@ -131,6 +131,7 @@ describe('GET /api/purchases runtime compatibility', () => {
 
     ;(globalThis as { eventHandler?: unknown }).eventHandler = (fn: unknown) => fn
     ;(globalThis as { requireUserSession?: unknown }).requireUserSession = mocks.requireUserSession
+    ;(globalThis as { setHeader?: unknown }).setHeader = vi.fn()
   })
 
   it('falls back to core purchase columns when full select fails and still returns purchases', async () => {

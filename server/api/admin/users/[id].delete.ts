@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { requireAdminAccess } from '../../../utils/admin'
-import { tables, useDB } from '../../../utils/db'
+import { requireAdminAccess } from '@root/server/utils/admin'
+import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
   const user = await requireAdminAccess(event)
