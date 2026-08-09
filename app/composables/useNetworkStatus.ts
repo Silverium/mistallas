@@ -174,6 +174,7 @@ export async function flushOfflineWork({
   const syncedEntries: QueuedMutation[] = []
   const syncedPhotoPurchaseIds: number[] = []
   let droppedMutations = 0
+  let haltedByNetworkFailure = false
 
   for (const entry of pendingQueue) {
     try {
@@ -204,6 +205,10 @@ export async function flushOfflineWork({
           }
         }
         continue
+      }
+
+      if (status == null) {
+        haltedByNetworkFailure = true
       }
 
       // Stop on network/server failures to preserve request order.
@@ -270,6 +275,11 @@ export async function flushOfflineWork({
         droppedMutations++
         continue
       }
+
+      if (status == null) {
+        haltedByNetworkFailure = true
+      }
+
       // Stop on network/server failures to preserve retry order.
       break
     }
@@ -279,7 +289,8 @@ export async function flushOfflineWork({
     syncedMutations: syncedEntries.length,
     uploadedFromPendingStore,
     droppedMutations,
-    syncedPhotoPurchaseIds
+    syncedPhotoPurchaseIds,
+    haltedByNetworkFailure
   }
 }
 
@@ -345,6 +356,7 @@ export function useNetworkStatus() {
   const toast = useToast()
   const hadBeenOffline = ref(false)
   const observedOfflineSignal = ref(false)
+  const hasShownReconnectToastForCycle = useState<boolean>('network-has-shown-reconnect-toast-cycle', () => false)
   const isFlushing = ref(false)
   const flushRetryTimer = ref<number | null>(null)
   const recoveryRetryTimer = ref<number | null>(null)
@@ -600,16 +612,18 @@ export function useNetworkStatus() {
     if (!online) {
       clearFlushRetry()
       hadBeenOffline.value = true
+      hasShownReconnectToastForCycle.value = false
       scheduleRecoveryRetry()
       return
     }
 
-    if (observedOfflineSignal.value && shouldAnnounceReconnection({
+    if (!hasShownReconnectToastForCycle.value && observedOfflineSignal.value && shouldAnnounceReconnection({
       online,
       wasOnline,
       hadBeenOffline: hadBeenOffline.value
     })) {
       toast.add({ title: 'Conexión restablecida.' })
+      hasShownReconnectToastForCycle.value = true
       hadBeenOffline.value = false
       observedOfflineSignal.value = false
 
@@ -718,6 +732,11 @@ export function useNetworkStatus() {
 
     if (!isOnline.value && (result.syncedMutations > 0 || result.uploadedFromPendingStore > 0)) {
       applyBrowserOnlineState(true)
+    }
+
+    if (result.haltedByNetworkFailure && hasPendingWork() && import.meta.client && !navigator.onLine) {
+      observedOfflineSignal.value = true
+      applyBrowserOnlineState(false)
     }
 
     const progressMade = result.syncedMutations > 0

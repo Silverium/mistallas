@@ -97,7 +97,13 @@ describe('flushOfflineWork', () => {
       request
     })
 
-    expect(result).toEqual({ syncedMutations: 1, uploadedFromPendingStore: 0, droppedMutations: 0, syncedPhotoPurchaseIds: [101] })
+    expect(result).toEqual({
+      syncedMutations: 1,
+      uploadedFromPendingStore: 0,
+      droppedMutations: 0,
+      syncedPhotoPurchaseIds: [101],
+      haltedByNetworkFailure: true
+    })
     expect(offlineQueue.queue.map(entry => entry.id)).toEqual(['q2'])
     expect(pendingPhotos.pendingPhotos.map(photo => photo.id)).toEqual(['p2'])
   })
@@ -126,7 +132,13 @@ describe('flushOfflineWork', () => {
       request
     })
 
-    expect(result).toEqual({ syncedMutations: 0, uploadedFromPendingStore: 1, droppedMutations: 0, syncedPhotoPurchaseIds: [] })
+    expect(result).toEqual({
+      syncedMutations: 0,
+      uploadedFromPendingStore: 1,
+      droppedMutations: 0,
+      syncedPhotoPurchaseIds: [],
+      haltedByNetworkFailure: false
+    })
     expect(request).toHaveBeenCalledWith('/api/purchases/10/photos', expect.objectContaining({ method: 'POST' }))
     expect(pendingPhotos.pendingPhotos).toHaveLength(0)
   })
@@ -158,7 +170,13 @@ describe('flushOfflineWork', () => {
       request
     })
 
-    expect(result).toEqual({ syncedMutations: 0, uploadedFromPendingStore: 0, droppedMutations: 0, syncedPhotoPurchaseIds: [] })
+    expect(result).toEqual({
+      syncedMutations: 0,
+      uploadedFromPendingStore: 0,
+      droppedMutations: 0,
+      syncedPhotoPurchaseIds: [],
+      haltedByNetworkFailure: true
+    })
     expect(pendingPhotos.pendingPhotos).toHaveLength(1)
     expect(request).toHaveBeenCalledTimes(1)
   })
@@ -190,7 +208,13 @@ describe('flushOfflineWork', () => {
       request
     })
 
-    expect(result).toEqual({ syncedMutations: 0, uploadedFromPendingStore: 0, droppedMutations: 0, syncedPhotoPurchaseIds: [] })
+    expect(result).toEqual({
+      syncedMutations: 0,
+      uploadedFromPendingStore: 0,
+      droppedMutations: 0,
+      syncedPhotoPurchaseIds: [],
+      haltedByNetworkFailure: true
+    })
     expect(pendingPhotos.pendingPhotos).toHaveLength(1)
     expect(request).toHaveBeenCalledWith('http://localhost:8787/api/purchases/300/photos', expect.any(Object))
   })
@@ -232,7 +256,13 @@ describe('flushOfflineWork', () => {
       request
     })
 
-    expect(result).toEqual({ syncedMutations: 1, uploadedFromPendingStore: 0, droppedMutations: 1, syncedPhotoPurchaseIds: [301] })
+    expect(result).toEqual({
+      syncedMutations: 1,
+      uploadedFromPendingStore: 0,
+      droppedMutations: 1,
+      syncedPhotoPurchaseIds: [301],
+      haltedByNetworkFailure: false
+    })
     expect(offlineQueue.queue).toHaveLength(0)
     expect(pendingPhotos.pendingPhotos).toHaveLength(0)
   })
@@ -269,7 +299,13 @@ describe('flushOfflineWork', () => {
       request
     })
 
-    expect(result).toEqual({ syncedMutations: 1, uploadedFromPendingStore: 0, droppedMutations: 0, syncedPhotoPurchaseIds: [302] })
+    expect(result).toEqual({
+      syncedMutations: 1,
+      uploadedFromPendingStore: 0,
+      droppedMutations: 0,
+      syncedPhotoPurchaseIds: [302],
+      haltedByNetworkFailure: false
+    })
     expect(request).toHaveBeenCalledTimes(1)
     expect(request).toHaveBeenCalledWith('/api/purchases/302/photos', expect.objectContaining({ method: 'POST' }))
     expect(offlineQueue.queue).toHaveLength(0)
