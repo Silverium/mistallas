@@ -285,6 +285,32 @@ test.describe('offline indicator consistency', { tag: '@offline' }, () => {
     await expect(getReconnectToastCount(page)).resolves.toBe(1)
   })
 
+  test('offline + refresh on /purchases keeps indicator offline once purchases finish reloading (networkidle)', async ({ page, context }) => {
+    const unique = Date.now()
+
+    await authenticateViaE2ELogin(context.request, {
+      userId: `telegram:e2e-offline-purchases-refresh-${unique}`,
+      login: `offline-purchases-refresh-${unique}`
+    })
+
+    await page.goto('http://localhost:8787/purchases', { waitUntil: 'networkidle' })
+    await waitForServiceWorkerControl(page)
+
+    const indicator = page.getByTestId('offline-indicator')
+    await expect(indicator).toHaveCount(0)
+
+    await context.setOffline(true)
+    await emitConnectivityEvent(page, true)
+    await expect(indicator).toBeVisible()
+
+    await page.reload({ waitUntil: 'networkidle' })
+
+    await expect(page.getByRole('button', { name: 'Mis Tallas' })).toBeVisible()
+    await expect(indicator).toBeVisible()
+    await page.waitForTimeout(1_000) // Wait for hydration/listeners.
+    await expect(page.getByTestId('offline-indicator')).toHaveCount(1)
+  })
+
   test('shows one reconnect toast per reconnect cycle (two cycles => two toasts)', async ({ page, context }) => {
     await page.goto('http://localhost:8787/', { waitUntil: 'networkidle' })
     await waitForServiceWorkerControl(page)

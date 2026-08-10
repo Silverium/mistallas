@@ -27,21 +27,69 @@ const toggleDarkMode = () => {
   isDarkMode.value = !isDarkMode.value
 }
 
+function deleteIndexedDatabase(name: string) {
+  return new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(name)
+    // A stale connection left open by a previous SW/tab can block deletion —
+    // don't let that hang the reset, just move on.
+    request.onsuccess = () => resolve()
+    request.onerror = () => resolve()
+    request.onblocked = () => resolve()
+  })
+}
+
+// Nuclear reset for users stuck on a stale PWA install: unregisters every
+// service worker, drops every Cache Storage bucket and IndexedDB database
+// (workbox keeps its precache/expiration bookkeeping there even though the
+// app itself never touches IndexedDB directly), then clears local/session
+// storage before reloading. Each phase is isolated in its own try/catch so a
+// browser that blocks one API (e.g. no indexedDB.databases() support) still
+// gets the rest of the cleanup instead of aborting halfway through.
 const hardReset = async () => {
   try {
     await clear()
   }
   catch { console.warn('Failed to clear session') }
-  localStorage.clear()
-  sessionStorage.clear()
-  if ('caches' in window) {
-    const keys = await caches.keys()
-    await Promise.all(keys.map(key => caches.delete(key)))
-  }
+
   if ('serviceWorker' in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations()
-    await Promise.all(registrations.map(r => r.unregister()))
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map(r => r.unregister()))
+    }
+    catch { console.warn('Failed to unregister service workers') }
   }
+
+  if ('caches' in window) {
+    try {
+      const keys = await caches.keys()
+      await Promise.all(keys.map(key => caches.delete(key)))
+    }
+    catch { console.warn('Failed to clear caches') }
+  }
+
+  if ('indexedDB' in window && typeof indexedDB.databases === 'function') {
+    try {
+      const databases = await indexedDB.databases()
+      await Promise.all(
+        databases
+          .map(db => db.name)
+          .filter((name): name is string => Boolean(name))
+          .map(deleteIndexedDatabase)
+      )
+    }
+    catch { console.warn('Failed to clear IndexedDB') }
+  }
+
+  try {
+    localStorage.clear()
+  }
+  catch { console.warn('Failed to clear localStorage') }
+
+  try {
+    sessionStorage.clear()
+  }
+  catch { console.warn('Failed to clear sessionStorage') }
+
   window.location.reload()
 }
 const reloadPage = () => {

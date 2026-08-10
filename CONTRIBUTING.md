@@ -101,6 +101,19 @@ or
 npx vitest
 ```
 
+### Running e2e Tests (Playwright)
+
+```bash
+# Requires a preview server already running (pnpm run preview)
+pnpm test:e2e
+
+# Preferred: builds + boots a fresh preview server, runs the tests, then
+# tears it down. Use this when debugging a flaky e2e test or verifying a
+# fix — it avoids false results from a stale build or a leftover
+# wrangler/workerd process squatting on port 8787 from a previous run.
+pnpm test:e2e:fresh e2e/preview/some.spec.ts
+```
+
 ### Linting
 
 ```bash

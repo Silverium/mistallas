@@ -1,7 +1,7 @@
 /// <reference lib="WebWorker" />
 
 import { clientsClaim } from 'workbox-core'
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
+import { precacheAndRoute, cleanupOutdatedCaches, matchPrecache } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
@@ -117,8 +117,8 @@ registerRoute(
             await broadcastNetworkStatus('NETWORK_OFFLINE')
           }
 
-          return await caches.match('/')
-            || await caches.match('/index.html')
+          return await matchPrecache('/')
+            || await caches.match('/')
             || Response.error()
         }
       }

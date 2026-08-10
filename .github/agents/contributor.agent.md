@@ -115,6 +115,7 @@ shared/types/          # Shared TypeScript types (auth.d.ts)
 - Run: `pnpm test`
 - Use Vitest; test server utils (tiers, validation logic) — not Cloudflare-specific integrations do not use `pnpm vitest ...`, use `pnpm test` instead
 - Run e2e tests with Playwright: `pnpm test:e2e` (requires `pnpm run preview` running)
+- **Prefer `pnpm test:e2e:fresh <spec files...>` over `pnpm test:e2e` when debugging or verifying an e2e fix.** It kills any stale `wrangler`/`workerd` processes left on port 8787 from a previous session, does a full `pnpm build` + fresh `pnpm run preview`, waits for the server, runs the given Playwright args against it, then tears the server down. This avoids false passes/failures caused by testing against a stale build or a leftover server process — see `scripts/test-e2e-fresh.sh`.
 
 ### Code Style
 - Single quotes everywhere

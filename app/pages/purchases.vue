@@ -62,7 +62,6 @@ type ComparisonResult = {
 
 const toast = useToast()
 const queryCache = useQueryCache()
-const requestFetch = useRequestFetch()
 const offlineFetch = useOfflineFetch()
 const offlineQueue = useOfflineQueueStore()
 const pendingPhotos = usePendingPhotosStore()
@@ -121,7 +120,7 @@ const offlineStore = useOfflineDataStore()
 const globalOnlineState = useState<boolean>('network-online', () => import.meta.client ? navigator.onLine : true)
 const syncVersion = useState<number>('network-sync-version', () => 0)
 const syncedPhotoPurchases = useState<number[]>('network-synced-photo-purchase-ids', () => [])
-const isClientOffline = ref(import.meta.client ? !navigator.onLine : false)
+const isClientOffline = ref(import.meta.client ? !globalOnlineState.value : false)
 const onlineRecoveryVersion = ref(0)
 const connectivityPollTimer = ref<number | null>(null)
 const needsOnlineRefetch = ref(false)
@@ -773,8 +772,14 @@ const applyConnectivityState = async (nextOffline: boolean) => {
   }
 }
 
+// globalOnlineState is the single source of truth for connectivity (maintained
+// by useNetworkStatus.ts from real SW/network signals, never from a raw
+// navigator.onLine read — that flag can report "online" while the browser is
+// still genuinely offline, e.g. right after a reload under network emulation).
+// These handlers only react to it; they must not write it or re-derive it from
+// navigator.onLine themselves, or they can flip the page online while every
+// real request is still failing.
 const handleBrowserOffline = async () => {
-  globalOnlineState.value = false
   await applyConnectivityState(true)
 }
 
@@ -788,22 +793,11 @@ const handleBrowserOnline = async () => {
     return
   }
 
-  if (import.meta.client && !navigator.onLine) {
-    try {
-      await requestFetch(`/api/ping?_connectivityProbe=${Date.now()}`)
-    }
-    catch {
-      await applyConnectivityState(true)
-      return
-    }
-  }
-
   lastOnlineRecoveryAttemptAt.value = now
 
   isHandlingOnlineRecovery.value = true
 
   try {
-    globalOnlineState.value = true
     await applyConnectivityState(false)
 
     onlineRecoveryVersion.value += 1
@@ -825,6 +819,12 @@ const shouldRetryOnlineRecoveryNow = () => {
 }
 
 const triggerOnlineRecoveryRetry = () => {
+  // Only retry a stalled refetch once globalOnlineState itself says we're
+  // online — never based on navigator.onLine, which is unreliable here.
+  if (!globalOnlineState.value) {
+    return
+  }
+
   if (!needsOnlineRefetch.value) {
     return
   }
@@ -844,57 +844,18 @@ onMounted(() => {
   isHydrated.value = true
 
   if (import.meta.client) {
-    isClientOffline.value = !navigator.onLine
-    window.addEventListener('offline', handleBrowserOffline)
-    window.addEventListener('online', handleBrowserOnline)
+    isClientOffline.value = !globalOnlineState.value
     window.addEventListener('scroll', updateScrollToTopVisibility, { passive: true })
     updateScrollToTopVisibility()
 
     connectivityPollTimer.value = window.setInterval(() => {
-      const nextOffline = !navigator.onLine
-      const hasPendingSyncWork = pendingPurchases.pendingPurchases.length > 0
-        || pendingPhotos.pendingPhotos.length > 0
-        || offlineQueue.queue.length > 0
-
-      if (hasPendingSyncWork && !isHandlingOnlineRecovery.value && shouldRetryOnlineRecoveryNow()) {
-        void handleBrowserOnline()
-      }
-
-      if (nextOffline) {
-        needsOnlineRefetch.value = true
-
-        if (!isHandlingOnlineRecovery.value && shouldRetryOnlineRecoveryNow()) {
-          void requestFetch(`/api/ping?_connectivityProbe=${Date.now()}`)
-            .then(async () => {
-              await handleBrowserOnline()
-            })
-            .catch(() => {
-              // Still offline.
-            })
-        }
-      }
-
-      if (nextOffline === isClientOffline.value) {
-        if (!nextOffline) {
-          triggerOnlineRecoveryRetry()
-        }
-        return
-      }
-
-      if (nextOffline) {
-        void handleBrowserOffline()
-      }
-      else {
-        void handleBrowserOnline()
-      }
+      triggerOnlineRecoveryRetry()
     }, 1000)
   }
 })
 
 onBeforeUnmount(() => {
   if (import.meta.client) {
-    window.removeEventListener('offline', handleBrowserOffline)
-    window.removeEventListener('online', handleBrowserOnline)
     window.removeEventListener('scroll', updateScrollToTopVisibility)
 
     if (connectivityPollTimer.value != null) {

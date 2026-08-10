@@ -483,18 +483,12 @@ export function useNetworkStatus() {
       return
     }
 
-    if (!isOnline.value) {
-      try {
-        const probeUrl = `/api/ping?_connectivityProbe=${Date.now()}`
-        await $fetch(probeUrl)
-        applyBrowserOnlineState(true)
-      }
-      catch {
-        scheduleRecoveryRetry()
-        return
-      }
-    }
-
+    // Don't pre-flight with a lightweight ping — it can succeed even when the
+    // page itself is genuinely offline (e.g. a service worker's own fetch runs
+    // outside the browser's per-tab network throttle), which previously caused
+    // this to wrongly mark us online. Let the real queued mutation requests be
+    // the source of truth: flushQueue() only flips isOnline back to true once
+    // one of them actually succeeds (see the check after flushOfflineWork below).
     await flushQueue()
 
     if (hasPendingWork()) {
@@ -555,6 +549,13 @@ export function useNetworkStatus() {
     }
 
     if (payload.type === 'NETWORK_ONLINE') {
+      // The service worker runs in its own execution context, so its reachability
+      // probe can succeed even while the page's own network interface is down
+      // (e.g. Chrome DevTools' per-tab offline throttle doesn't reach worker threads).
+      // Never let that report override a browser-level "offline" signal.
+      if (import.meta.client && !navigator.onLine) {
+        return
+      }
       applyBrowserOnlineState(true)
       resetRecoveryBackoff()
       void attemptRecovery('event')
@@ -564,8 +565,14 @@ export function useNetworkStatus() {
     if (payload.type === 'NETWORK_STATUS' && typeof payload.online === 'boolean') {
       if (!payload.online) {
         observedOfflineSignal.value = true
+        applyBrowserOnlineState(false)
+        return
       }
-      applyBrowserOnlineState(payload.online)
+
+      if (import.meta.client && !navigator.onLine) {
+        return
+      }
+      applyBrowserOnlineState(true)
     }
   }
 
