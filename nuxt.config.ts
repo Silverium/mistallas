@@ -28,6 +28,17 @@ export default defineNuxtConfig({
     stripeSecretKey: '',
     stripeWebhookSecret: '',
     adminUserIds: process.env.ADMIN_USER_IDS || 'soldeplat@gmail.com,10578392',
+    // No top-level `maxAge` here: that field makes nuxt-auth-utils/h3 throw
+    // "Session expired!" and force a re-login after N seconds, regardless of
+    // activity. The cookie's own maxAge below only controls how long the
+    // browser retains it (capped at 400 days by browsers anyway), so the
+    // session survives closing/reopening the app and only ends on logout.
+    session: {
+      password: process.env.NUXT_SESSION_PASSWORD || 'change-me-to-a-long-random-string',
+      cookie: {
+        maxAge: 60 * 60 * 24 * 400
+      }
+    },
     tierLimits: {
       free: Number(process.env.NUXT_TIER_LIMIT_FREE ?? 200),
       premium: Number(process.env.NUXT_TIER_LIMIT_PREMIUM ?? 500),
