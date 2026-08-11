@@ -3,7 +3,7 @@ import type { DropdownMenuItem } from '#ui/types'
 import { useOfflineRouteAccess } from '~/utils/offline-route-access'
 import { useEffectiveSession } from '~/composables/useEffectiveSession'
 
-const { loggedIn, liveLoggedIn, isOffline, user, clear } = useEffectiveSession()
+const { loggedIn, liveLoggedIn, isOffline, user, clear, lastLoginProvider } = useEffectiveSession()
 
 // Show authenticated nav only when live session is valid, or when offline (using snapshot)
 const isAuthenticated = computed(() => liveLoggedIn.value || (isOffline.value && loggedIn.value))
@@ -118,6 +118,19 @@ useSeoMeta({
   ogImage: '/social-image.png',
   twitterImage: '/social-image.png',
   twitterCard: 'summary_large_image'
+})
+
+const loginItems = computed(() => {
+  return [
+    [
+      // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
+      { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram', slot: 'telegram' },
+      { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true, slot: 'google' },
+      { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true, slot: 'github' }
+      // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true },
+    ],
+    [{ label: 'Resetear app', icon: 'i-lucide-rotate-ccw', onSelect: hardReset, color: 'error', title: 'Borra todos los datos locales y recarga la app' }]
+  ] satisfies DropdownMenuItem[][]
 })
 
 const items = computed(() => {
@@ -242,17 +255,7 @@ const userAvatar = computed(() => {
 
           <UDropdownMenu
             v-if="!isAuthenticated"
-            :items="[
-              [
-                // { label: 'Apple', icon: 'i-simple-icons-apple', to: '/api/auth/apple', external: true },
-                { label: 'Telegram', icon: 'i-simple-icons-telegram', to: '/auth/telegram' },
-                { label: 'Google', icon: 'i-simple-icons-google', to: '/api/auth/google', external: true },
-                { label: 'GitHub', icon: 'i-simple-icons-github', to: '/api/auth/github', external: true }
-              // { label: 'Instagram', icon: 'i-simple-icons-instagram', to: '/api/auth/instagram', external: true },
-
-              ],
-              [{ label: 'Resetear app', icon: 'i-lucide-rotate-ccw', onSelect: hardReset, color: 'error', title: 'Borra todos los datos locales y recarga la app' }]
-            ]"
+            :items="loginItems"
           >
             <div class="login-glow-border">
               <UButton
@@ -265,6 +268,21 @@ const userAvatar = computed(() => {
                 Iniciar sesión
               </UButton>
             </div>
+
+            <template
+              v-for="provider in ['telegram', 'google', 'github']"
+              :key="provider"
+              #[`${provider}-trailing`]
+            >
+              <UBadge
+                v-if="lastLoginProvider === provider"
+                size="xs"
+                color="primary"
+                variant="subtle"
+              >
+                Reciente
+              </UBadge>
+            </template>
           </UDropdownMenu>
           <div
             v-else-if="isAuthenticated"

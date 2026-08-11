@@ -8,6 +8,9 @@ function cloneUser(user: User): User {
 export function useEffectiveSession() {
   const { loggedIn: liveLoggedIn, user: liveUser, clear: clearSession } = useUserSession()
   const offlineUser = useLocalStorage<User | null>('offline-user-snapshot', null)
+  // Remembers which provider this device last logged in with, so the login
+  // menu can flag it with a "Reciente" badge before the user picks again.
+  const lastLoginProvider = useLocalStorage<User['loginProvider'] | null>('last-login-provider', null)
   // Tracks which user id the offline store/query cache were last refreshed
   // for. Reset to null on logout so the next login (even by the same user)
   // always triggers a refresh, while reloads/navigations during an already
@@ -18,6 +21,10 @@ export function useEffectiveSession() {
     watch([liveLoggedIn, liveUser], ([loggedIn, user]) => {
       if (loggedIn && user) {
         offlineUser.value = cloneUser(user)
+
+        if (user.loginProvider) {
+          lastLoginProvider.value = user.loginProvider
+        }
 
         if (refreshedForUserId.value !== user.id) {
           refreshedForUserId.value = user.id
@@ -63,6 +70,7 @@ export function useEffectiveSession() {
     liveLoggedIn,
     liveUser,
     offlineUser,
-    isOffline
+    isOffline,
+    lastLoginProvider
   }
 }
