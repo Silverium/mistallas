@@ -1,0 +1,16 @@
+shamefullyHoist: true
+strictPeerDependencies: false
+
+overrides:
+  baseline-browser-mapping: 2.10.43
+  browserslist: 4.28.6
+  caniuse-lite: 1.0.30001805
+
+allowBuilds:
+  '@parcel/watcher': false
+  better-sqlite3: true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  vue-demi: true
+  workerd: true
