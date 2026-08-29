@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "scripts": {
     "dev": "NUXT_DEV_SERVER=true nuxi dev --host 0.0.0.0",
     "dev:local": "node scripts/start-preview.mjs",
