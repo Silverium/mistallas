@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => {
     users: { __table: 'users' },
     userMeasurements: { __table: 'userMeasurements' },
     purchaseEvents: { __table: 'purchaseEvents' },
-    purchaseMeasurementSnapshots: { __table: 'purchaseMeasurementSnapshots' }
+    purchaseMeasurementSnapshots: { __table: 'purchaseMeasurementSnapshots' },
+    categories: { __table: 'categories' }
   }
 
   const dbClient = {
@@ -29,6 +30,8 @@ const mocks = vi.hoisted(() => {
               return { count: state.purchaseCount }
             if (table === tables.users)
               return { id: 'user-1', tier: state.userTier }
+            if (table === tables.categories)
+              return null
             return null
           },
           all: async () => {
@@ -54,7 +57,8 @@ const mocks = vi.hoisted(() => {
               return state.createdSnapshot
             return null
           }
-        })
+        }),
+        onConflictDoNothing: () => Promise.resolve()
       })
     }))
   }
@@ -96,7 +100,9 @@ vi.mock('@root/server/utils/db', () => ({
 }))
 
 vi.mock('drizzle-orm', () => ({
-  eq: vi.fn(() => Symbol('eq'))
+  eq: vi.fn(() => Symbol('eq')),
+  and: vi.fn(() => Symbol('and')),
+  sql: (strings: TemplateStringsArray) => strings.join('')
 }))
 
 vi.mock('#imports', () => ({
@@ -206,9 +212,10 @@ describe('POST /api/purchases tier enforcement', () => {
       snapshot: mocks.state.createdSnapshot
     })
 
-    expect(mocks.dbClient.insert).toHaveBeenCalledTimes(2)
-    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(1, mocks.tables.purchaseEvents)
-    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(2, mocks.tables.purchaseMeasurementSnapshots)
+    expect(mocks.dbClient.insert).toHaveBeenCalledTimes(3)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(1, mocks.tables.categories)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(2, mocks.tables.purchaseEvents)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(3, mocks.tables.purchaseMeasurementSnapshots)
   })
 
   it('creates a purchase without a snapshot when no measurements exist and user is under the tier limit', async () => {
@@ -223,7 +230,8 @@ describe('POST /api/purchases tier enforcement', () => {
       snapshot: null
     })
 
-    expect(mocks.dbClient.insert).toHaveBeenCalledTimes(1)
-    expect(mocks.dbClient.insert).toHaveBeenCalledWith(mocks.tables.purchaseEvents)
+    expect(mocks.dbClient.insert).toHaveBeenCalledTimes(2)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(1, mocks.tables.categories)
+    expect(mocks.dbClient.insert).toHaveBeenNthCalledWith(2, mocks.tables.purchaseEvents)
   })
 })

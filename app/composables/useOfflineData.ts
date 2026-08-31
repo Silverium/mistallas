@@ -23,6 +23,12 @@ const safeLocalStorage = {
   }
 }
 
+export interface OfflineCategory {
+  id: number
+  name: string
+  verified: boolean
+}
+
 /**
  * Persisted store that holds a local copy of all synced API data.
  * Used as an offline fallback when network requests fail.
@@ -33,6 +39,7 @@ export const useOfflineDataStore = defineStore('offlineData', () => {
   // Purchases keyed by "page:limit:search" — e.g. "1:20:" or "2:20:nike"
   const purchasePages = ref<Record<string, PurchasesPaginatedResponse>>({})
   const measurements = ref<unknown[]>([])
+  const categories = ref<OfflineCategory[]>([])
 
   function setPurchasePage(page: number, limit: number, search: string, data: PurchasesPaginatedResponse) {
     purchasePages.value[`${page}:${limit}:${search}`] = data
@@ -46,12 +53,21 @@ export const useOfflineDataStore = defineStore('offlineData', () => {
     measurements.value = data
   }
 
+  function setCategories(data: OfflineCategory[]) {
+    categories.value = data
+  }
+
+  function getCategories(): OfflineCategory[] {
+    return categories.value
+  }
+
   function clear() {
     purchasePages.value = {}
     measurements.value = []
+    categories.value = []
   }
 
-  return { purchasePages, measurements, setPurchasePage, getPurchasePage, setMeasurements, clear }
+  return { purchasePages, measurements, categories, setPurchasePage, getPurchasePage, setMeasurements, setCategories, getCategories, clear }
 }, {
   persist: {
     storage: safeLocalStorage

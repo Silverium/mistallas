@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { useValidatedBody, z } from 'h3-zod'
 import { getUserPurchaseCount, isAtLimit } from '@root/server/utils/tiers'
+import { resolveCategoryName } from '@root/server/utils/categories'
 import { tables, useDB } from '@root/server/utils/db'
 
 export default eventHandler(async (event) => {
@@ -42,10 +43,12 @@ export default eventHandler(async (event) => {
     measurement = allMeasurements.sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())[0] ?? null
   }
 
+  const category = await resolveCategoryName(input.category, user.id)
+
   const purchase = await useDB().insert(tables.purchaseEvents).values({
     userId: user.id,
     brand: input.brand,
-    category: input.category,
+    category,
     productType: input.productType,
     sizeLabel: input.sizeLabel,
     purchasedAt: input.purchasedAt ?? new Date(),

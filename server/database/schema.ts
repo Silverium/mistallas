@@ -54,6 +54,17 @@ export const purchaseEvents = sqliteTable('purchase_events', {
   price: real('price')
 })
 
+export const categories = sqliteTable('categories', {
+  id: integer('id').primaryKey(),
+  name: text('name').notNull(),
+  normalizedName: text('normalized_name').notNull(),
+  verified: integer('verified').notNull().default(0),
+  createdByUserId: text('created_by_user_id').$type<number | string | null>(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull()
+}, table => [
+  uniqueIndex('categories_normalized_name_unique').on(table.normalizedName)
+])
+
 export const purchaseMeasurementSnapshots = sqliteTable('purchase_measurement_snapshots', {
   id: integer('id').primaryKey(),
   purchaseEventId: integer('purchase_event_id').notNull(),
@@ -83,8 +94,8 @@ export const purchasePhotos = sqliteTable('purchase_photos', {
   height: integer('height'),
   bytes: real('bytes'),
   createdAt: integer('created_at', { mode: 'timestamp' })
-}, table => ({
-  purchaseEventSlotUnique: uniqueIndex('purchase_photos_purchase_event_slot_unique').on(table.purchaseEventId, table.slot),
-  purchaseEventIdIdx: index('purchase_photos_purchase_event_id_idx').on(table.purchaseEventId),
-  userIdIdx: index('purchase_photos_user_id_idx').on(table.userId)
-}))
+}, table => [
+  uniqueIndex('purchase_photos_purchase_event_slot_unique').on(table.purchaseEventId, table.slot),
+  index('purchase_photos_purchase_event_id_idx').on(table.purchaseEventId),
+  index('purchase_photos_user_id_idx').on(table.userId)
+])
