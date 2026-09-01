@@ -3,6 +3,7 @@ import { useValidatedBody, z } from 'h3-zod'
 import { requireAdminAccess } from '@root/server/utils/admin'
 import { tables, useDB } from '@root/server/utils/db'
 import { encodeMeasurementInsert } from '@root/server/utils/measurements'
+import { PREDEFINED_CATEGORIES } from '@root/shared/utils/categories'
 
 export default eventHandler(async (event) => {
   await requireAdminAccess(event)
@@ -57,7 +58,7 @@ export default eventHandler(async (event) => {
   }
 
   const brands = input.brands || ['Nike', 'Adidas', 'Puma', 'ASICS', 'New Balance', 'Levi\'s', 'Gap', 'H&M']
-  const categories = ['Shoes', 'Apparel', 'Accessories', 'Outerwear', 'Activewear']
+  const categories = PREDEFINED_CATEGORIES
   const productTypes = ['Running Shoes', 'T-Shirt', 'Shorts', 'Jeans', 'Socks', 'Cap', 'Jacket', 'Sweater', 'Pants', 'Hoodie']
   const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '30', '32', '34', '36', '38', '40', '42', '44']
   const fitFeedbacks = ['Perfect', 'Snug', 'Loose', 'Just Right', null, null]

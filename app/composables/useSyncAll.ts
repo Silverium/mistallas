@@ -1,5 +1,6 @@
 import type { PurchasesApiResponse } from '~~/shared/types/purchases'
 import { useLocalStorage } from '@vueuse/core'
+import type { OfflineCategory } from './useOfflineData'
 
 export type SyncStatus = 'idle' | 'syncing' | 'done' | 'error'
 
@@ -38,7 +39,13 @@ export function useSyncAll() {
       offlineData.setMeasurements(measurementData)
       progress.value = 10
 
-      // Step 2: all purchases — 10 → 100%
+      // Step 2: categories — 10 → 20%
+      label.value = 'Sincronizando categorías...'
+      const categoryResult = await $fetch<{ categories: OfflineCategory[] }>('/api/purchases/categories')
+      offlineData.setCategories(categoryResult.categories)
+      progress.value = 20
+
+      // Step 3: all purchases — 20 → 100%
       label.value = 'Sincronizando compras...'
       const purchaseResult = await $fetch<PurchasesApiResponse>('/api/purchases?limit=1000')
 

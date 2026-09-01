@@ -16,9 +16,11 @@ export default eventHandler(async (event) => {
   })
   const { user } = await requireUserSession(event)
 
+  const category = await resolveCategoryName(input.category, user.id)
+
   const purchase = await useDB().update(tables.purchaseEvents).set({
     brand: input.brand,
-    category: input.category,
+    category,
     productType: input.productType,
     sizeLabel: input.sizeLabel,
     fitFeedback: input.fitFeedback ?? null,

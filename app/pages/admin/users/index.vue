@@ -10,13 +10,22 @@
             Gestiona los planes y roles de los usuarios
           </p>
         </div>
-        <UButton
-          to="/"
-          variant="outline"
-          color="neutral"
-        >
-          Volver al inicio
-        </UButton>
+        <div class="flex gap-2">
+          <UButton
+            to="/admin/categories"
+            variant="outline"
+            color="neutral"
+          >
+            Categorías
+          </UButton>
+          <UButton
+            to="/"
+            variant="outline"
+            color="neutral"
+          >
+            Volver al inicio
+          </UButton>
+        </div>
       </div>
 
       <!-- Filters -->

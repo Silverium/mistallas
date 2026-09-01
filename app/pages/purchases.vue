@@ -11,6 +11,7 @@ import { useSyncedStringQueryParam } from '~/utils/query-param'
 import { useEffectiveSession } from '~/composables/useEffectiveSession'
 import { isOfflineQueuedError } from '~/composables/useOfflineFetch'
 import { useOfflineQueueStore } from '~/composables/useOfflineQueue'
+import type { OfflineCategory } from '~/composables/useOfflineData'
 import { usePendingPhotosStore } from '~/composables/usePendingPhotosStore'
 import { usePendingPurchasesStore } from '~/composables/usePendingPurchasesStore'
 import { useOfflineRouteAccess } from '~/utils/offline-route-access'
@@ -719,6 +720,52 @@ const { data: purchasesResponse, refresh: refreshPurchases } = useQuery({
   },
   enabled: () => shouldEnableOfflineProtectedQuery(isHydrated.value, loggedIn.value, offlineRouteAccess.value)
 })
+
+const { data: categoriesResponse } = useQuery({
+  key: () => ['purchase-categories'],
+  query: async () => {
+    try {
+      const response = await $fetch<{ categories: OfflineCategory[] }>('/api/purchases/categories')
+      offlineStore.setCategories(response.categories)
+      return response
+    }
+    catch {
+      return { categories: offlineStore.getCategories() }
+    }
+  },
+  enabled: () => shouldEnableOfflineProtectedQuery(isHydrated.value, loggedIn.value, offlineRouteAccess.value)
+})
+
+// Custom categories the user creates in this session but that haven't come
+// back from the server yet (e.g. offline, or before the next refetch).
+const localCustomCategoryOptions = ref<{ label: string, value: string, verified: boolean }[]>([])
+
+const categoryOptions = computed(() => {
+  const fetched = (categoriesResponse.value?.categories ?? []).map(category => ({
+    label: category.name,
+    value: category.name,
+    verified: category.verified
+  }))
+  const fetchedValues = new Set(fetched.map(category => category.value.toLowerCase()))
+  const localOnly = localCustomCategoryOptions.value.filter(category => !fetchedValues.has(category.value.toLowerCase()))
+
+  return [...fetched, ...localOnly]
+})
+
+const verifiedCategoryNames = computed(() => new Set(
+  (categoriesResponse.value?.categories ?? [])
+    .filter(category => category.verified)
+    .map(category => category.name.toLowerCase())
+))
+
+function isCategoryVerified(name: string): boolean {
+  return verifiedCategoryNames.value.has(name.toLowerCase())
+}
+
+function handleCreateCategory(value: string) {
+  localCustomCategoryOptions.value.push({ label: value, value, verified: false })
+  form.category = value
+}
 
 watch(globalOnlineState, async (online, wasOnline) => {
   if (online === wasOnline) {
@@ -1497,8 +1544,8 @@ const purchaseList = computed(() => (purchasesResponse.value?.purchases ?? []) a
 const getMergedPhotoSlots = (purchase: Purchase) => {
   const persisted = Array.isArray(purchase.photoSlots)
     ? purchase.photoSlots
-        .map(slot => Number(slot))
-        .filter(slot => Number.isFinite(slot) && slot > 0)
+      .map(slot => Number(slot))
+      .filter(slot => Number.isFinite(slot) && slot > 0)
     : []
 
   const pendingPreviewCount = getPendingPhotosForPurchase(purchase.id).length
@@ -1935,20 +1982,12 @@ const diffRows = computed<RowDiff[]>(() => {
 
 <template>
   <div class="flex flex-col gap-6">
-    <label
-      for="purchase-photo-input"
-      class="sr-only"
-    >
+    <label for="purchase-photo-input" class="sr-only">
       Subir foto de compra
     </label>
-    <input
-      id="purchase-photo-input"
-      ref="photoInput"
-      type="file"
-      accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
-      class="hidden"
-      @change="onPhotoInputChange"
-    >
+    <input id="purchase-photo-input" ref="photoInput" type="file"
+      accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" class="hidden"
+      @change="onPhotoInputChange">
 
     <div>
       <h2 class="text-lg font-semibold">
@@ -1958,26 +1997,15 @@ const diffRows = computed<RowDiff[]>(() => {
         Guarda compras para comparar tus tallas de ese momento con las actuales.
       </p>
       <div class="mt-3">
-        <UButton
-          type="button"
-          icon="i-lucide-plus"
-          @click="startAddingPurchase"
-        >
+        <UButton type="button" icon="i-lucide-plus" @click="startAddingPurchase">
           Añadir compra
         </UButton>
-        <div
-          v-if="!hasMeasurements"
-          class="space-y-2"
-        >
+        <div v-if="!hasMeasurements" class="space-y-2">
           <p class="text-sm text-muted">
             Necesitas registrar al menos una medida corporal para poder comparar cómo ha cambiado tu cuerpo después de
             la compra.
           </p>
-          <UButton
-            type="button"
-            icon="i-lucide-plus"
-            @click="() => { void router.push('/measurements') }"
-          >
+          <UButton type="button" icon="i-lucide-plus" @click="() => { void router.push('/measurements') }">
             Añadir medidas
           </UButton>
         </div>
@@ -1988,105 +2016,64 @@ const diffRows = computed<RowDiff[]>(() => {
       <h3 class="font-medium">
         Historial de compras
       </h3>
-      <UInput
-        v-model="historyFilter"
-        icon="i-lucide-filter"
-        placeholder="Filtrar por marca, categoría, prenda, talla o notas"
-      />
+      <UInput v-model="historyFilter" icon="i-lucide-filter"
+        placeholder="Filtrar por marca, categoría, prenda, talla o notas" />
       <ul class="divide-y divide-gray-200 dark:divide-gray-800">
-        <li
-          v-for="purchase in purchaseList"
-          :key="purchase.id"
-          :data-db-id="purchase.id"
-          class="py-3 space-y-3"
-        >
+        <li v-for="purchase in purchaseList" :key="purchase.id" :data-db-id="purchase.id" class="py-3 space-y-3">
           <div data-testid="purchase-info">
             <div class="flex items-center gap-2">
-              <p
-                data-testid="purchase-summary"
-                class="font-medium"
-              >
+              <p data-testid="purchase-summary" class="font-medium">
                 {{ purchase.brand }} · {{ purchase.productType }} · Talla {{ purchase.sizeLabel }}
               </p>
-              <UBadge
-                v-if="purchase.isPending"
-                color="warning"
-                variant="subtle"
-                data-testid="purchase-pending-indicator"
-              >
+              <UBadge v-if="purchase.isPending" color="warning" variant="subtle"
+                data-testid="purchase-pending-indicator">
                 Pendiente
               </UBadge>
             </div>
-            <p
-              data-testid="purchase-details"
-              class="text-sm text-muted"
-            >
-              {{ purchase.category }} · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template
-                v-if="purchase.price != null"
-              >
+            <p data-testid="purchase-details" class="text-sm text-muted">
+              {{ purchase.category }}
+              <UBadge :color="isCategoryVerified(purchase.category) ? 'primary' : 'neutral'" variant="subtle" size="xs"
+                :icon="isCategoryVerified(purchase.category) ? 'i-lucide-badge-check' : 'i-lucide-badge-question-mark'"
+                :title="isCategoryVerified(purchase.category) ? 'Verificada' : 'Personalizada'">
+              </UBadge>
+              · {{ new Date(purchase.purchasedAt).toLocaleDateString() }}<template v-if="purchase.price != null">
                 · {{ purchase.price.toFixed(2) }} €
               </template>
             </p>
-            <p
-              v-if="purchase.notes || purchase.fitFeedback"
-              class="text-sm text-muted"
-            >
+            <p v-if="purchase.notes || purchase.fitFeedback" class="text-sm text-muted">
               {{ purchase.notes || purchase.fitFeedback }}
             </p>
 
             <div
               v-if="purchase.photoSlots?.length || canAddPhoto(purchase) || getPendingPhotosForPurchase(purchase.id).length > 0"
-              class="mt-2"
-            >
-              <PurchasePhotoUploadGrid
-                :uploaded-slots="getMergedPhotoSlots(purchase)"
+              class="mt-2">
+              <PurchasePhotoUploadGrid :uploaded-slots="getMergedPhotoSlots(purchase)"
                 :pending-previews="getPendingPhotosForPurchase(purchase.id)"
-                :build-photo-src="(slot: number) => buildPhotoUrl(purchase.id, slot)"
-                :fill-empty-slots="true"
-                :can-add-photo="canAddPhoto(purchase)"
-                :enable-uploaded-preview="true"
+                :build-photo-src="(slot: number) => buildPhotoUrl(purchase.id, slot)" :fill-empty-slots="true"
+                :can-add-photo="canAddPhoto(purchase)" :enable-uploaded-preview="true"
                 @preview-uploaded="(slot: number) => openPreview(purchase, slot)"
-                @add-empty-slot="openEditAndAddPhoto(purchase)"
-              />
+                @add-empty-slot="openEditAndAddPhoto(purchase)" />
             </div>
           </div>
 
           <div class="grid grid-cols-3 gap-2">
-            <UButton
-              variant="soft"
-              color="neutral"
-              icon="i-lucide-pencil"
-              class="h-10 w-full justify-center text-center sm:h-10"
-              @click="startEditing(purchase)"
-            >
+            <UButton variant="soft" color="neutral" icon="i-lucide-pencil"
+              class="h-10 w-full justify-center text-center sm:h-10" @click="startEditing(purchase)">
               Editar
             </UButton>
-            <UButton
-              variant="soft"
-              icon="i-lucide-git-compare"
-              class="h-10 w-full justify-center text-center sm:h-10"
-              :loading="comparing && selectedPurchase?.id === purchase.id"
-              :disabled="!hasMeasurements"
-              @click="comparePurchase(purchase)"
-            >
+            <UButton variant="soft" icon="i-lucide-git-compare" class="h-10 w-full justify-center text-center sm:h-10"
+              :loading="comparing && selectedPurchase?.id === purchase.id" :disabled="!hasMeasurements"
+              @click="comparePurchase(purchase)">
               Comparar medidas
             </UButton>
-            <UButton
-              variant="soft"
-              color="error"
-              icon="i-lucide-trash"
-              class="h-10 w-full justify-center text-center sm:h-10"
-              @click="openDeletePurchaseDialog(purchase)"
-            >
+            <UButton variant="soft" color="error" icon="i-lucide-trash"
+              class="h-10 w-full justify-center text-center sm:h-10" @click="openDeletePurchaseDialog(purchase)">
               Eliminar
             </UButton>
           </div>
         </li>
       </ul>
-      <p
-        v-if="!purchaseList.length"
-        class="text-sm text-muted"
-      >
+      <p v-if="!purchaseList.length" class="text-sm text-muted">
         No hay compras que coincidan con el filtro.
       </p>
     </div>
@@ -2101,64 +2088,33 @@ const diffRows = computed<RowDiff[]>(() => {
             </h3>
           </div>
 
-          <form
-            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
-            @submit.prevent="savePurchase()"
-          >
-            <UInput
-              v-model="form.brand"
-              placeholder="Marca (Nike, Zara...) *"
-              required
-              autofocus
-            />
-            <UInput
-              v-model="form.category"
-              placeholder="Categoría (ropa, calzado...) *"
-              required
-            />
-            <UInput
-              v-model="form.productType"
-              placeholder="Tipo de prenda (t-shirt, jeans...) *"
-              required
-            />
-            <UInput
-              v-model="form.sizeLabel"
-              placeholder="Talla (S, M, L, 42...) *"
-              required
-            />
-            <UInput
-              v-model="form.fitFeedback"
-              placeholder="Feedback de ajuste (opcional)"
-            />
-            <UInput
-              v-model="form.price"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Precio (opcional)"
-            />
-            <UInput
-              v-model="form.notes"
-              class="sm:col-span-2"
-              placeholder="Notas (opcional)"
-            />
+          <form class="grid grid-cols-1 sm:grid-cols-2 gap-3" @submit.prevent="savePurchase()">
+            <UInput v-model="form.brand" placeholder="Marca (Nike, Zara...) *" required autofocus />
+            <UInputMenu v-model="form.category" :items="categoryOptions" value-key="value" label-key="label"
+              create-item="always" open-on-click open-on-focus placeholder="Categoría (ropa, calzado...) *" required
+              @create="handleCreateCategory">
+              <template #item-label="{ item }">
+                <span class="flex items-center gap-1.5">
+                  {{ item.label }}
+                  <UBadge :color="item.verified ? 'primary' : 'neutral'" variant="subtle" size="xs" :icon="item.verified ? 'i-lucide-badge-check' : 'i-lucide-badge-question-mark'">
+                    {{ item.verified ? 'Verificada' : 'Personalizada' }}
+                  </UBadge>
+                </span>
+              </template>
+            </UInputMenu>
+            <UInput v-model="form.productType" placeholder="Tipo de prenda (t-shirt, jeans...) *" required />
+            <UInput v-model="form.sizeLabel" placeholder="Talla (S, M, L, 42...) *" required />
+            <UInput v-model="form.fitFeedback" placeholder="Feedback de ajuste (opcional)" />
+            <UInput v-model="form.price" type="number" min="0" step="0.01" placeholder="Precio (opcional)" />
+            <UInput v-model="form.notes" class="sm:col-span-2" placeholder="Notas (opcional)" />
 
             <div class="sm:col-span-2 flex flex-wrap gap-2">
-              <UButton
-                type="submit"
-                icon="i-lucide-shopping-cart"
-                :loading="isSubmitting"
-                :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel"
-              >
+              <UButton type="submit" icon="i-lucide-shopping-cart" :loading="isSubmitting"
+                :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel">
                 Guardar compra
               </UButton>
-              <UButton
-                type="button"
-                variant="soft"
-                color="neutral"
-                icon="i-lucide-x"
-                @click="() => { resetForm(); isAddPurchaseDialogOpen = false }"
-              >
+              <UButton type="button" variant="soft" color="neutral" icon="i-lucide-x"
+                @click="() => { resetForm(); isAddPurchaseDialogOpen = false }">
                 Cancelar
               </UButton>
             </div>
@@ -2175,102 +2131,52 @@ const diffRows = computed<RowDiff[]>(() => {
             <h3 class="text-lg font-medium">
               Editar compra
             </h3>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              @click="closeEditModal"
-            />
+            <UButton color="neutral" variant="ghost" icon="i-lucide-x" @click="closeEditModal" />
           </div>
 
-          <form
-            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
-            @submit.prevent="savePurchase()"
-          >
-            <UInput
-              v-model="form.brand"
-              placeholder="Marca (Nike, Zara...) *"
-              required
-              autofocus
-            />
-            <UInput
-              v-model="form.category"
-              placeholder="Categoría (ropa, calzado...) *"
-              required
-            />
-            <UInput
-              v-model="form.productType"
-              placeholder="Tipo de prenda (t-shirt, jeans...) *"
-              required
-            />
-            <UInput
-              v-model="form.sizeLabel"
-              placeholder="Talla (S, M, L, 42...) *"
-              required
-            />
-            <UInput
-              v-model="form.fitFeedback"
-              placeholder="Feedback de ajuste (opcional)"
-            />
-            <UInput
-              v-model="form.price"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Precio (opcional)"
-            />
-            <UInput
-              v-model="form.notes"
-              class="sm:col-span-2"
-              placeholder="Notas (opcional)"
-            />
+          <form class="grid grid-cols-1 sm:grid-cols-2 gap-3" @submit.prevent="savePurchase()">
+            <UInput v-model="form.brand" placeholder="Marca (Nike, Zara...) *" required autofocus />
+            <UInputMenu v-model="form.category" :items="categoryOptions" value-key="value" label-key="label"
+              create-item="always" open-on-click open-on-focus placeholder="Categoría (ropa, calzado...) *" required
+              @create="handleCreateCategory">
+              <template #item-label="{ item }">
+                <span class="flex items-center gap-1.5">
+                  {{ item.label }}
+                  <UBadge :color="item.verified ? 'primary' : 'neutral'" variant="subtle" size="xs" :icon="item.verified ? 'i-lucide-badge-check' : 'i-lucide-badge-question-mark'">
+                    {{ item.verified ? 'Verificada' : 'Personalizada' }}
+                  </UBadge>
+                </span>
+              </template>
+            </UInputMenu>
+            <UInput v-model="form.productType" placeholder="Tipo de prenda (t-shirt, jeans...) *" required />
+            <UInput v-model="form.sizeLabel" placeholder="Talla (S, M, L, 42...) *" required />
+            <UInput v-model="form.fitFeedback" placeholder="Feedback de ajuste (opcional)" />
+            <UInput v-model="form.price" type="number" min="0" step="0.01" placeholder="Precio (opcional)" />
+            <UInput v-model="form.notes" class="sm:col-span-2" placeholder="Notas (opcional)" />
 
             <div class="sm:col-span-2">
               <USeparator />
             </div>
 
             <div class="sm:col-span-2">
-              <PurchasePhotoUploadGrid
-                :uploaded-slots="editingPurchasePhotoSlots"
-                :pending-previews="pendingPhotosPreviews"
-                :build-photo-src="buildEditingPhotoUrl"
-                :show-header="true"
-                :fill-empty-slots="true"
-                :can-add-photo="canAddPhotoInEditModal"
-                :show-delete-uploaded="true"
-                :show-delete-pending="true"
-                @add-empty-slot="triggerPhotoPicker"
-                @delete-uploaded="handleEditModalUploadedPhotoDelete"
-                @delete-pending="removePendingPhoto"
-              />
+              <PurchasePhotoUploadGrid :uploaded-slots="editingPurchasePhotoSlots"
+                :pending-previews="pendingPhotosPreviews" :build-photo-src="buildEditingPhotoUrl" :show-header="true"
+                :fill-empty-slots="true" :can-add-photo="canAddPhotoInEditModal" :show-delete-uploaded="true"
+                :show-delete-pending="true" @add-empty-slot="triggerPhotoPicker"
+                @delete-uploaded="handleEditModalUploadedPhotoDelete" @delete-pending="removePendingPhoto" />
             </div>
 
             <div class="sm:col-span-2 flex flex-wrap gap-2">
-              <UButton
-                type="submit"
-                icon="i-lucide-save"
-                :loading="isSubmitting"
-                :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel"
-              >
+              <UButton type="submit" icon="i-lucide-save" :loading="isSubmitting"
+                :disabled="!form.brand || !form.category || !form.productType || !form.sizeLabel">
                 Guardar cambios
               </UButton>
-              <UButton
-                type="button"
-                color="error"
-                variant="soft"
-                icon="i-lucide-trash"
+              <UButton type="button" color="error" variant="soft" icon="i-lucide-trash"
                 :loading="deletingPurchase && deletingPurchaseId === editingPurchaseId"
-                @click="deleteCurrentEditingPurchase"
-              >
+                @click="deleteCurrentEditingPurchase">
                 Eliminar compra
               </UButton>
-              <UButton
-                type="button"
-                variant="soft"
-                color="neutral"
-                icon="i-lucide-x"
-                @click="closeEditModal"
-              >
+              <UButton type="button" variant="soft" color="neutral" icon="i-lucide-x" @click="closeEditModal">
                 Cancelar
               </UButton>
             </div>
@@ -2291,20 +2197,10 @@ const diffRows = computed<RowDiff[]>(() => {
           </p>
 
           <div class="flex flex-wrap gap-2">
-            <UButton
-              type="button"
-              color="error"
-              icon="i-lucide-trash"
-              @click="confirmDeletePurchase"
-            >
+            <UButton type="button" color="error" icon="i-lucide-trash" @click="confirmDeletePurchase">
               Eliminar
             </UButton>
-            <UButton
-              type="button"
-              color="neutral"
-              variant="soft"
-              @click="closeDeletePurchaseDialog"
-            >
+            <UButton type="button" color="neutral" variant="soft" @click="closeDeletePurchaseDialog">
               Cancelar
             </UButton>
           </div>
@@ -2324,20 +2220,10 @@ const diffRows = computed<RowDiff[]>(() => {
           </p>
 
           <div class="flex flex-wrap gap-2">
-            <UButton
-              type="button"
-              color="error"
-              icon="i-lucide-trash"
-              @click="confirmDeletePhoto"
-            >
+            <UButton type="button" color="error" icon="i-lucide-trash" @click="confirmDeletePhoto">
               Eliminar
             </UButton>
-            <UButton
-              type="button"
-              color="neutral"
-              variant="soft"
-              @click="closeDeletePhotoDialog"
-            >
+            <UButton type="button" color="neutral" variant="soft" @click="closeDeletePhotoDialog">
               Cancelar
             </UButton>
           </div>
@@ -2347,102 +2233,55 @@ const diffRows = computed<RowDiff[]>(() => {
 
     <UModal v-model:open="isComparisonDialogOpen">
       <template #content>
-        <div
-          v-if="selectedPurchase && selectedComparison"
-          class="space-y-3 p-4 sm:p-5 max-h-[85dvh] overflow-y-auto"
-        >
+        <div v-if="selectedPurchase && selectedComparison" class="space-y-3 p-4 sm:p-5 max-h-[85dvh] overflow-y-auto">
           <div class="flex items-start justify-between gap-3">
             <h3 class="font-medium">
               Comparativa de medidas · {{ selectedPurchase.brand }} {{ selectedPurchase.productType }} ({{
                 selectedPurchase.sizeLabel }})
             </h3>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              @click="closeComparisonDialog"
-            />
+            <UButton color="neutral" variant="ghost" icon="i-lucide-x" @click="closeComparisonDialog" />
           </div>
 
-          <UAlert
-            v-if="selectedComparison.error"
-            color="error"
-            variant="soft"
-            icon="i-lucide-alert-circle"
-            :title="selectedComparison.error"
-          />
+          <UAlert v-if="selectedComparison.error" color="error" variant="soft" icon="i-lucide-alert-circle"
+            :title="selectedComparison.error" />
 
-          <UAlert
-            v-else-if="selectedComparison.offline"
-            color="warning"
-            variant="soft"
-            icon="i-lucide-wifi-off"
+          <UAlert v-else-if="selectedComparison.offline" color="warning" variant="soft" icon="i-lucide-wifi-off"
             title="Sin conexión"
-            description="Se muestra la comparación entre tu medida más cercana a la fecha de compra y tus medidas actuales almacenadas localmente."
-          />
+            description="Se muestra la comparación entre tu medida más cercana a la fecha de compra y tus medidas actuales almacenadas localmente." />
 
-          <UAlert
-            v-else-if="selectedComparison.highlights?.weight"
-            color="primary"
-            variant="subtle"
-            icon="i-lucide-scale"
-            :title="selectedComparison.highlights.weight"
-          />
+          <UAlert v-else-if="selectedComparison.highlights?.weight" color="primary" variant="subtle"
+            icon="i-lucide-scale" :title="selectedComparison.highlights.weight" />
 
           <template v-if="!selectedComparison.error">
-            <UAlert
-              v-if="!selectedComparison.snapshotAtPurchase && !selectedComparison.availableMeasurements?.length"
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-info"
+            <UAlert v-if="!selectedComparison.snapshotAtPurchase && !selectedComparison.availableMeasurements?.length"
+              color="neutral" variant="soft" icon="i-lucide-info"
               title="No hay medidas registradas para el día de la compra."
-              description="Registra medidas regulares para comparar cómo ha cambiado tu cuerpo después de cada compra."
-            />
+              description="Registra medidas regulares para comparar cómo ha cambiado tu cuerpo después de cada compra." />
 
-            <div
-              v-else-if="!selectedComparison.snapshotAtPurchase && selectedComparison.availableMeasurements?.length"
-              class="space-y-3"
-            >
-              <UAlert
-                v-if="selectedComparison.offline"
-                color="warning"
-                variant="soft"
-                icon="i-lucide-wifi-off"
+            <div v-else-if="!selectedComparison.snapshotAtPurchase && selectedComparison.availableMeasurements?.length"
+              class="space-y-3">
+              <UAlert v-if="selectedComparison.offline" color="warning" variant="soft" icon="i-lucide-wifi-off"
                 title="Sin conexión"
-                description="La comparación completa estará disponible cuando te reconectes. Se muestran tus medidas actuales almacenadas localmente."
-              />
-              <UAlert
-                v-else
-                color="info"
-                variant="soft"
-                icon="i-lucide-info"
-                title="Vincula una medida a esta compra"
-                description="Selecciona una medida para asociarla al día de la compra y comparar cómo ha cambiado tu cuerpo."
-              />
+                description="La comparación completa estará disponible cuando te reconectes. Se muestran tus medidas actuales almacenadas localmente." />
+              <UAlert v-else color="info" variant="soft" icon="i-lucide-info" title="Vincula una medida a esta compra"
+                description="Selecciona una medida para asociarla al día de la compra y comparar cómo ha cambiado tu cuerpo." />
               <div class="space-y-2">
                 <p class="text-sm font-medium">
                   Medidas disponibles:
                 </p>
                 <div class="space-y-2 max-h-60 overflow-y-auto">
-                  <UButton
-                    v-for="measurement in selectedComparison.availableMeasurements"
-                    :key="measurement.id"
-                    variant="soft"
-                    class="w-full justify-start"
-                    :loading="linkingMeasurement"
+                  <UButton v-for="measurement in selectedComparison.availableMeasurements" :key="measurement.id"
+                    variant="soft" class="w-full justify-start" :loading="linkingMeasurement"
                     :disabled="selectedComparison.offline"
-                    @click="linkMeasurementToPurchase({ purchaseId: Number(selectedPurchase!.id), measurementId: measurement.id })"
-                  >
+                    @click="linkMeasurementToPurchase({ purchaseId: Number(selectedPurchase!.id), measurementId: measurement.id })">
                     {{ new Date(measurement.recordedAt).toLocaleDateString() }} - {{ measurement.weightKg }} kg
                   </UButton>
                 </div>
               </div>
             </div>
 
-            <div
-              v-else-if="diffRows.length"
-              class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800"
-            >
+            <div v-else-if="diffRows.length"
+              class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
               <table class="min-w-full text-sm">
                 <thead class="bg-gray-50 dark:bg-gray-900/40">
                   <tr>
@@ -2461,11 +2300,7 @@ const diffRows = computed<RowDiff[]>(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="row in diffRows"
-                    :key="row.key"
-                    class="border-t border-gray-200 dark:border-gray-800"
-                  >
+                  <tr v-for="row in diffRows" :key="row.key" class="border-t border-gray-200 dark:border-gray-800">
                     <td class="px-3 py-2 font-medium">
                       {{ row.label }}
                     </td>
@@ -2475,10 +2310,8 @@ const diffRows = computed<RowDiff[]>(() => {
                     <td class="px-3 py-2">
                       {{ fmt(row.now, row.unit) }}
                     </td>
-                    <td
-                      class="px-3 py-2"
-                      :class="row.delta > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'"
-                    >
+                    <td class="px-3 py-2"
+                      :class="row.delta > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-emerald-600 dark:text-emerald-400'">
                       {{ row.delta > 0 ? '+' : '' }}{{ fmt(row.delta, row.unit) }}
                     </td>
                   </tr>
@@ -2486,28 +2319,15 @@ const diffRows = computed<RowDiff[]>(() => {
               </table>
             </div>
 
-            <UAlert
-              v-else
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-check"
-              title="No hay cambios de medidas corporales entre el día de la compra y tus medidas actuales."
-            />
+            <UAlert v-else color="neutral" variant="soft" icon="i-lucide-check"
+              title="No hay cambios de medidas corporales entre el día de la compra y tus medidas actuales." />
           </template>
 
           <div class="flex justify-between w-full">
-            <UButton
-              color="success"
-              variant="link"
-              to="/measurements"
-            >
+            <UButton color="success" variant="link" to="/measurements">
               Actualizar medidas
             </UButton>
-            <UButton
-              color="neutral"
-              variant="soft"
-              @click="closeComparisonDialog"
-            >
+            <UButton color="neutral" variant="soft" @click="closeComparisonDialog">
               Cerrar
             </UButton>
           </div>
@@ -2515,91 +2335,48 @@ const diffRows = computed<RowDiff[]>(() => {
       </template>
     </UModal>
 
-    <UDrawer
-      v-model:open="isPreviewOpen"
-      direction="bottom"
-      :handle="false"
-      :dismissible="true"
-      :ui="{
-        content: 'h-screen w-screen max-w-none rounded-none border-0 bg-black/95 p-0'
-      }"
-      @drag="handlePreviewDrawerDrag"
-      @release="handlePreviewDrawerRelease"
-    >
+    <UDrawer v-model:open="isPreviewOpen" direction="bottom" :handle="false" :dismissible="true" :ui="{
+      content: 'h-screen w-screen max-w-none rounded-none border-0 bg-black/95 p-0'
+    }" @drag="handlePreviewDrawerDrag" @release="handlePreviewDrawerRelease">
       <template #content>
         <div class="relative flex h-screen w-screen flex-col bg-black/95 text-white">
           <div class="absolute right-3 top-3 z-10">
-            <UButton
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-x"
-              @click="closePreview"
-            >
+            <UButton color="neutral" variant="soft" icon="i-lucide-x" @click="closePreview">
               Cerrar
             </UButton>
           </div>
 
           <div class="flex min-h-0 flex-1 items-center justify-center p-4 sm:p-8">
-            <UCarousel
-              v-if="selectedPreviewPurchase && previewSlots.length"
-              ref="previewCarousel"
-              :items="previewSlots"
-              :start-index="selectedPreviewSlotIndex"
-              :drag-threshold="12"
-              class="h-full w-full"
-              :ui="{
+            <UCarousel v-if="selectedPreviewPurchase && previewSlots.length" ref="previewCarousel" :items="previewSlots"
+              :start-index="selectedPreviewSlotIndex" :drag-threshold="12" class="h-full w-full" :ui="{
                 root: 'h-full w-full',
                 viewport: 'h-full w-full',
                 container: 'h-full w-full',
                 item: 'h-full w-full flex items-center justify-center'
-              }"
-              @select="handlePreviewCarouselSelect"
-            >
+              }" @select="handlePreviewCarouselSelect">
               <template #default="{ item: slot }">
-                <img
-                  :src="buildPhotoUrl(selectedPreviewPurchase.id, Number(slot))"
+                <img :src="buildPhotoUrl(selectedPreviewPurchase.id, Number(slot))"
                   :alt="selectedPreviewPurchase ? `Vista ampliada de ${selectedPreviewPurchase.brand}` : 'Vista ampliada'"
-                  class="max-h-full max-w-full select-none object-contain"
-                  draggable="false"
-                >
+                  class="max-h-full max-w-full select-none object-contain" draggable="false">
               </template>
             </UCarousel>
           </div>
 
-          <div
-            v-if="selectedPreviewPurchase && previewSlots.length > 1"
-            class="flex items-center gap-2 overflow-x-auto border-t border-white/10 p-3"
-          >
-            <button
-              v-for="slot in previewSlots"
-              :key="`modal-preview-${selectedPreviewPurchase.id}-${slot}`"
-              type="button"
-              class="rounded-md transition ring-2"
+          <div v-if="selectedPreviewPurchase && previewSlots.length > 1"
+            class="flex items-center gap-2 overflow-x-auto border-t border-white/10 p-3">
+            <button v-for="slot in previewSlots" :key="`modal-preview-${selectedPreviewPurchase.id}-${slot}`"
+              type="button" class="rounded-md transition ring-2"
               :class="selectedPreviewSlot === slot ? 'ring-primary' : 'ring-transparent hover:ring-white/40'"
-              :aria-label="`Ver foto ${slot}`"
-              @click="selectedPreviewSlot = slot"
-            >
-              <img
-                :src="buildPhotoUrl(selectedPreviewPurchase.id, slot)"
-                :alt="`Miniatura de foto ${slot}`"
-                class="size-16 rounded-md object-cover"
-                loading="lazy"
-              >
+              :aria-label="`Ver foto ${slot}`" @click="selectedPreviewSlot = slot">
+              <img :src="buildPhotoUrl(selectedPreviewPurchase.id, slot)" :alt="`Miniatura de foto ${slot}`"
+                class="size-16 rounded-md object-cover" loading="lazy">
             </button>
           </div>
         </div>
       </template>
     </UDrawer>
 
-    <UButton
-      v-if="showScrollToTopButton"
-      type="button"
-      icon="i-lucide-arrow-up"
-      color="primary"
-      size="xl"
-      class="fixed bottom-5 right-5 z-50 rounded-full shadow-lg"
-      aria-label="Subir al inicio"
-      @click="scrollToTop"
-    />
+    <UButton v-if="showScrollToTopButton" type="button" icon="i-lucide-arrow-up" color="primary" size="xl"
+      class="fixed bottom-5 right-5 z-50 rounded-full shadow-lg" aria-label="Subir al inicio" @click="scrollToTop" />
   </div>
 </template>
